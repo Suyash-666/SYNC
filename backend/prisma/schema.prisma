@@ -1,0 +1,296 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  STUDENT
+  MODERATOR
+  ADMIN
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  CANCELLED
+}
+
+enum AssignmentStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  SUBMITTED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum FileType {
+  PDF
+  IMAGE
+  LINK
+  VIDEO
+}
+
+enum AIRole {
+  USER
+  ASSISTANT
+}
+
+enum NotificationType {
+  ASSIGNMENT
+  ATTENDANCE
+  AI_SUGGESTION
+  COLLABORATION
+  SYSTEM
+}
+
+enum PlacementCategory {
+  DSA
+  INTERVIEW
+  APTITUDE
+  RESUME
+}
+
+enum PlacementStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model User {
+  id                       String                  @id @default(uuid()) @db.Uuid
+  email                    String                  @unique
+  password_hash            String
+  full_name                String
+  avatar_url               String? 
+  role                     Role                    @default(STUDENT)
+  college                  String?
+  degree                   String?
+  total_semesters          Int?
+  is_onboarded             Boolean                 @default(false)
+  is_active                Boolean                 @default(true)
+  refresh_token            String?
+  created_at               DateTime                @default(now())
+  updated_at               DateTime                @updatedAt
+
+  semesters                Semester[]
+  notes                    Note[]
+  assignments              Assignment[]
+  ai_history               AIHistory[]
+  notifications            Notification[]
+  study_room_memberships   StudyRoomMembership[]
+  placement_progress       PlacementProgress[]
+  attendance_records       AttendanceRecord[]
+resources                Resource[]
+created_study_rooms      StudyRoom[]
+study_room_messages      StudyRoomMessage[]
+password_resets          PasswordReset[]
+}
+
+model Semester {
+  id              String     @id @default(uuid()) @db.Uuid
+  user            User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id         String     @db.Uuid
+  semester_number Int
+  academic_year   String
+  start_date      DateTime?
+  end_date        DateTime?
+  is_current      Boolean    @default(false)
+
+  subjects        Subject[]
+  created_at      DateTime   @default(now())
+  updated_at      DateTime   @updatedAt
+}
+
+model Subject {
+  id                 String           @id @default(uuid()) @db.Uuid
+  semester           Semester         @relation(fields: [semester_id], references: [id], onDelete: Cascade)
+  semester_id        String           @db.Uuid
+  name               String
+  subject_code       String?
+  total_modules      Int              @default(0)
+  completed_modules  Int              @default(0)
+  internal_max_marks Int?             
+  internal_scored    Int?
+
+  attendance_records AttendanceRecord[]
+  modules            Module[]
+  assignments        Assignment[]
+  resources          Resource[]
+
+  @@index([semester_id])
+}
+
+model Module {
+  id         String   @id @default(uuid()) @db.Uuid
+  subject    Subject  @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  subject_id String   @db.Uuid
+  name       String
+  order_index Int
+
+  topics     Topic[]
+}
+
+model Topic {
+  id        String   @id @default(uuid()) @db.Uuid
+  module    Module   @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  module_id String   @db.Uuid
+  name      String
+  is_completed Boolean @default(false)
+}
+
+model AttendanceRecord {
+  id         String           @id @default(uuid()) @db.Uuid
+  subject    Subject?         @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  subject_id String?          @db.Uuid
+  user       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id    String           @db.Uuid
+  date       DateTime
+  status     AttendanceStatus
+  created_at DateTime         @default(now())
+
+  @@index([user_id, date])
+}
+
+model Assignment {
+  id           String           @id @default(uuid()) @db.Uuid
+  user         User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id      String           @db.Uuid
+  subject      Subject?         @relation(fields: [subject_id], references: [id], onDelete: SetNull)
+  subject_id   String?          @db.Uuid
+  title        String
+  description  String?
+  status       AssignmentStatus @default(TODO)
+  priority     Priority         @default(MEDIUM)
+  due_date     DateTime?
+  submitted_at DateTime?
+  created_at   DateTime         @default(now())
+  updated_at   DateTime         @updatedAt
+
+  @@index([user_id, status])
+}
+
+model Note {
+  id         String    @id @default(uuid()) @db.Uuid
+  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id    String    @db.Uuid
+  title      String
+  content    String
+  folder     String?
+  tags       String[]  @default([])
+  is_deleted Boolean   @default(false)
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  @@index([user_id, is_deleted])
+}
+
+model Resource {
+  id         String    @id @default(uuid()) @db.Uuid
+  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id    String    @db.Uuid
+  subject    Subject?  @relation(fields: [subject_id], references: [id], onDelete: SetNull)
+  subject_id String?   @db.Uuid
+  title      String
+  file_url   String
+  file_type  FileType
+  file_size  Int?
+  created_at DateTime  @default(now())
+}
+
+model AIHistory {
+  id             String   @id @default(uuid()) @db.Uuid
+  user           User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id        String   @db.Uuid
+  conversation_id String  @db.Uuid
+  role           AIRole
+  content        String
+  created_at     DateTime @default(now())
+}
+
+model StudyRoom {
+  id        String                 @id @default(uuid()) @db.Uuid
+  name      String
+  subject_tag String?
+  created_by User?                  @relation(fields: [created_by_id], references: [id], onDelete: SetNull)
+  created_by_id String?            @db.Uuid
+  is_active Boolean               @default(true)
+  created_at DateTime             @default(now())
+
+  memberships StudyRoomMembership[]
+  messages    StudyRoomMessage[]
+}
+
+model StudyRoomMembership {
+  id       String     @id @default(uuid()) @db.Uuid
+  room     StudyRoom  @relation(fields: [room_id], references: [id], onDelete: Cascade)
+  room_id  String     @db.Uuid
+  user     User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id  String     @db.Uuid
+  joined_at DateTime  @default(now())
+
+  @@unique([room_id, user_id])
+}
+
+model StudyRoomMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  room      StudyRoom @relation(fields: [room_id], references: [id], onDelete: Cascade)
+  room_id   String   @db.Uuid
+  user      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id   String   @db.Uuid
+  content   String
+  created_at DateTime @default(now())
+
+  @@index([room_id, created_at])
+}
+
+model Notification {
+  id         String           @id @default(uuid()) @db.Uuid
+  user       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id    String           @db.Uuid
+  type       NotificationType
+  title      String
+  body       String
+  is_read    Boolean          @default(false)
+  created_at DateTime         @default(now())
+}
+
+model PlacementProgress {
+  id         String           @id @default(uuid()) @db.Uuid
+  user       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id    String           @db.Uuid
+  category   PlacementCategory
+  topic      String
+  item_name  String
+  status     PlacementStatus  @default(NOT_STARTED)
+  difficulty Difficulty?
+  notes      String?
+  created_at DateTime         @default(now())
+  updated_at DateTime         @updatedAt
+}
+
+model PasswordReset {
+  id         String   @id @default(uuid()) @db.Uuid
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id    String   @db.Uuid
+  token_hash String
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  @@index([user_id])
+}

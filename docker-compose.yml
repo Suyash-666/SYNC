@@ -1,0 +1,33 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: sync
+      POSTGRES_PASSWORD: sync
+      POSTGRES_DB: sync_db
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+
+  backend:
+    build: ./backend
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./.env.example.backend
+    ports:
+      - '5000:5000'
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  db-data:

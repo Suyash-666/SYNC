@@ -1,0 +1,109 @@
+# =========================================================
+# Quantum AI — root .gitignore
+# Covers: backend (Node/Express/Prisma/Jest) + frontend (Vite/React/Tailwind)
+# =========================================================
+
+# ---------- Dependencies ----------
+node_modules/
+jspm_packages/
+
+# ---------- Build / dist outputs ----------
+dist/
+build/
+out/
+.next/
+.nuxt/
+.svelte-kit/
+.cache/
+.vite/
+.parcel-cache/
+.turbo/
+
+# ---------- Environment / secrets ----------
+# Real env files (credentials, keys, DB urls) — NEVER commit
+.env
+.env.*
+!.env.example
+!.env.example.backend
+!.env.example.frontend
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ---------- Logs ----------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.npm
+.eslintcache
+.pnp.*
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# ---------- Testing / coverage ----------
+coverage/
+.nyc_output/
+*.lcov
+.jest-cache/
+
+# ---------- Prisma / database ----------
+prisma/migrations/dev*
+prisma/.env
+# Generated Prisma client (regenerated from schema on install)
+backend/prisma/generated/
+node_modules/.prisma/
+
+# ---------- Frontend (Vite/React/Tailwind) ----------
+.vite/
+.vite-temp/
+
+# ---------- Backend runtime artifacts ----------
+backend/logs/
+backend/src/logs/
+backend/uploads/
+backend/tmp/
+backend/.tmp/
+
+# ---------- Docker / infra local state ----------
+docker-compose.override.yml
+*.pid
+*.seed
+*.pid.lock
+
+# ---------- IDE / editors ----------
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ---------- OS files ----------
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---------- Misc ----------
+*.tgz
+*.tar.gz
+.history/
+.tmp/
+.temp/
+.env.bak

@@ -1,0 +1,401 @@
+/* =========================================================================
+   SYNC — Global stylesheet
+   -------------------------------------------------------------------------
+   Layered as: tokens (CSS variables) → Tailwind base → custom utilities.
+   Why this layout?
+     • The HSL tokens in `:root` / `[data-theme='dark']` are read by the
+       Tailwind config via `hsl(var(--*) / <alpha-value>)`. This keeps a
+       single source of truth and lets us swap themes by setting
+       `data-theme` on any wrapper (we use `<html>`).
+     • All "premium" effects (glassmorphism, soft scrollbar, focus rings,
+       shimmer skeletons) live under @layer components so they can be
+       overridden by Tailwind utilities.
+   ========================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;650;700;750&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* -------------------------------------------------------------------------
+   Design tokens — HSL so Tailwind's <alpha-value> works
+   ------------------------------------------------------------------------- */
+:root {
+  /* Surfaces */
+  --bg:           36 24% 98%;
+  --bg-subtle:    36 20% 95%;
+  --bg-muted:     34 16% 90%;
+  --bg-inverse:   28 18% 8%;
+
+  --surface:        40 28% 99%;
+  --surface-raised: 40 22% 97%;
+  --surface-overlay: 38 18% 96%;
+
+  --border:        35 12% 84%;
+  --border-strong: 34 10% 70%;
+  --border-subtle: 36 14% 91%;
+
+  /* Foreground (text) */
+  --fg:        28 18% 8%;
+  --fg-muted:  30 7% 34%;
+  --fg-subtle: 30 6% 56%;
+  --fg-inverse: 40 30% 98%;
+
+  /* Brand (muted copper) */
+  --brand-50:  32 50% 94%;
+  --brand-100: 31 44% 88%;
+  --brand-200: 30 40% 78%;
+  --brand-300: 29 38% 66%;
+  --brand-400: 28 36% 55%;
+  --brand-500: 27 34% 44%;
+  --brand-600: 25 38% 34%;
+  --brand-700: 24 40% 26%;
+  --brand-800: 23 42% 20%;
+  --brand-900: 22 44% 15%;
+  --brand-fg:  40 30% 98%;
+
+  /* Semantic */
+  --success:      152 60% 36%;
+  --success-soft: 152 70% 94%;
+  --success-fg:   152 70% 22%;
+
+  --warning:      32 95% 50%;
+  --warning-soft: 32 100% 94%;
+  --warning-fg:   28 80% 30%;
+
+  --danger:      0 72% 52%;
+  --danger-soft: 0 85% 96%;
+  --danger-fg:   0 70% 32%;
+
+  --info:      217 91% 60%;
+  --info-soft: 217 95% 95%;
+  --info-fg:   217 80% 30%;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Z-index */
+  --z-dropdown: 1000;
+  --z-sticky:   1100;
+  --z-fixed:    1200;
+  --z-modal:    1400;
+  --z-popover:  1500;
+  --z-toast:    1600;
+}
+
+[data-theme='dark'] {
+  --bg:           28 18% 7%;
+  --bg-subtle:    28 16% 10%;
+  --bg-muted:     28 12% 14%;
+  --bg-inverse:   40 30% 98%;
+
+  --surface:        28 16% 9%;
+  --surface-raised: 28 14% 12%;
+  --surface-overlay: 28 14% 14%;
+
+  --border:        30 10% 18%;
+  --border-strong: 30 10% 28%;
+  --border-subtle: 30 10% 14%;
+
+  --fg:        40 26% 94%;
+  --fg-muted:  36 10% 70%;
+  --fg-subtle: 34 8% 50%;
+  --fg-inverse: 28 18% 8%;
+
+  --brand-fg:  0 0% 100%;
+
+  --success-soft: 152 50% 14%;
+  --success-fg:   152 60% 70%;
+  --warning-soft: 32 60% 16%;
+  --warning-fg:   32 90% 70%;
+  --danger-soft:  0 60% 18%;
+  --danger-fg:    0 80% 76%;
+  --info-soft:    217 60% 16%;
+  --info-fg:      217 90% 76%;
+}
+
+/* -------------------------------------------------------------------------
+   Base reset + global element styling
+   ------------------------------------------------------------------------- */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* Better default scroll */
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system,
+      BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+      sans-serif;
+    background-color: hsl(var(--bg));
+    color: hsl(var(--fg));
+    line-height: 1.6;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: hsl(var(--fg));
+  }
+
+  /* Selection */
+  ::selection {
+    background: hsl(var(--brand-200));
+    color: hsl(var(--brand-800));
+  }
+  ::-moz-selection {
+    background: hsl(var(--brand-200));
+    color: hsl(var(--brand-800));
+  }
+
+  /* Placeholder */
+  ::placeholder { color: hsl(var(--fg-subtle)); }
+  ::-moz-placeholder { color: hsl(var(--fg-subtle)); }
+
+  /* Focus ring — applied by utility (focus-visible:ring-2 ring-brand/40)
+     but we set a sensible default for elements that opt out */
+  :focus-visible {
+    outline: 2px solid hsl(var(--brand-500) / 0.55);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Component-level utilities
+   ------------------------------------------------------------------------- */
+@layer components {
+  /* Subtle, premium scrollbar (no flashy double-bar) */
+  .scrollbar-subtle {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border-strong)) transparent;
+  }
+  .scrollbar-subtle::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar-subtle::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-subtle::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .scrollbar-subtle::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--border-strong));
+    background-clip: padding-box;
+  }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .scrollbar-none { scrollbar-width: none; }
+
+  /* Glass surface — used sparingly on TopNav/Sidebar for "premium" feel */
+  .glass {
+    background: hsl(var(--bg) / 0.86);
+    -webkit-backdrop-filter: saturate(140%) blur(16px);
+    backdrop-filter: saturate(140%) blur(16px);
+    border: 1px solid hsl(var(--border) / 0.72);
+  }
+  [data-theme='dark'] .glass {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--bg) / 0.7) 0%,
+      hsl(var(--bg) / 0.5) 100%
+    );
+  }
+
+  /* Premium card shadow + ring */
+  .surface-card {
+    background: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+    box-shadow:
+      0 1px 0 0 hsl(var(--border-subtle)),
+      0 1px 2px 0 hsl(222 47% 9% / 0.04);
+  }
+
+  /* Shimmer — used for Skeleton placeholders */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--bg-muted)) 0%,
+      hsl(var(--surface-raised)) 50%,
+      hsl(var(--bg-muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+
+  .auth-ambient {
+    background:
+      radial-gradient(circle at 12% 18%, hsl(34 42% 32% / 0.28), transparent 28rem),
+      radial-gradient(circle at 80% 12%, hsl(42 36% 62% / 0.12), transparent 24rem),
+      linear-gradient(135deg, hsl(28 20% 6%), hsl(30 14% 10%) 55%, hsl(32 18% 15%));
+  }
+
+  .auth-ambient::before {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    background-image:
+      linear-gradient(hsl(40 28% 96% / 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(40 28% 96% / 0.045) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(circle at center, black, transparent 72%);
+    animation: ambientDrift 28s linear infinite;
+  }
+
+  .tracking-tight,
+  .-tracking-tight {
+    letter-spacing: 0 !important;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Keyframes (mirrored from tailwind config for raw-CSS use)
+   ------------------------------------------------------------------------- */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes fadeUp {
+  0%   { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+@keyframes ambientDrift {
+  0%   { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(56px, 56px, 0); }
+}
+
+/* -------------------------------------------------------------------------
+   Legacy token aliases (kept for backward-compatibility with existing
+   page code that references the old `text-text-primary` / `bg-background-primary`
+   / `border-surface-border` names). New code should use the canonical
+   tokens (`text-foreground`, `bg-background`, `border-border`).
+   ------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------
+   Override layer — these rules are placed AFTER `@tailwind utilities` so
+   they win source-order ties with Tailwind's auto-generated utilities for
+   the same class names. We use this to remap legacy dark-tint class names
+   (which were auto-generated with literal `rgba()` values from old code)
+   to the new light-theme HSL tokens.
+
+   IMPORTANT: this block must come after `@tailwind utilities` (which
+   happens implicitly because it's at the bottom of the file). It is also
+   deliberately NOT inside `@layer utilities` — utilities inside layers
+   are subject to purge-gating based on content scanning, and we want these
+   always emitted regardless of whether the source files reference them.
+   ------------------------------------------------------------------------- */
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.02\)\]  { background-color: hsl(var(--bg-subtle)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.03\)\]  { background-color: hsl(var(--bg-subtle)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.04\)\]  { background-color: hsl(var(--bg-subtle)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.05\)\]  { background-color: hsl(var(--bg-muted)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.06\)\]  { background-color: hsl(var(--bg-muted)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.07\)\]  { background-color: hsl(var(--bg-muted)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.08\)\]  { background-color: hsl(var(--bg-muted)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.09\)\]  { background-color: hsl(var(--bg-muted)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.1\)\]   { background-color: hsl(var(--border)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.12\)\]  { background-color: hsl(var(--border)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.15\)\]  { background-color: hsl(var(--border)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.18\)\]  { background-color: hsl(var(--border)) !important; }
+.bg-\[rgba\(255\2c 255\2c 255\2c 0\.2\)\]   { background-color: hsl(var(--border)) !important; }
+.bg-\[rgba\(0\2c 0\2c 0\2c 0\.2\)\]         { background-color: hsl(var(--bg-muted)) !important; }
+.bg-\[rgba\(0\2c 0\2c 0\2c 0\.25\)\]        { background-color: hsl(var(--bg-muted)) !important; }
+.bg-\[rgba\(99\2c 102\2c 241\2c 0\.08\)\]   { background-color: hsl(var(--brand-50)) !important; }
+.bg-\[rgba\(99\2c 102\2c 241\2c 0\.1\)\]    { background-color: hsl(var(--brand-50)) !important; }
+.bg-\[rgba\(99\2c 102\2c 241\2c 0\.12\)\]   { background-color: hsl(var(--brand-50)) !important; }
+.bg-\[rgba\(99\2c 102\2c 241\2c 0\.14\)\]   { background-color: hsl(var(--brand-50)) !important; }
+.bg-\[rgba\(99\2c 102\2c 241\2c 0\.16\)\]   { background-color: hsl(var(--brand-50)) !important; }
+.bg-\[rgba\(99\2c 102\2c 241\2c 0\.18\)\]   { background-color: hsl(var(--brand-100)) !important; }
+.bg-\[rgba\(99\2c 102\2c 241\2c 0\.7\)\]    { background-color: hsl(var(--brand-500)) !important; }
+.bg-\[rgba\(99\2c 102\2c 241\2c 0\.75\)\]   { background-color: hsl(var(--brand-500)) !important; }
+.bg-\[rgba\(99\2c 102\2c 241\2c 0\.8\)\]    { background-color: hsl(var(--brand-500)) !important; }
+.bg-\[rgba\(129\2c 140\2c 248\2c 0\.15\)\]  { background-color: hsl(var(--brand-50)) !important; }
+.bg-\[rgba\(129\2c 140\2c 248\2c 0\.18\)\]  { background-color: hsl(var(--brand-50)) !important; }
+.bg-\[rgba\(129\2c 140\2c 248\2c 0\.2\)\]   { background-color: hsl(var(--brand-50)) !important; }
+.bg-\[rgba\(245\2c 158\2c 11\2c 0\.1\)\]    { background-color: hsl(var(--warning-soft)) !important; }
+.bg-\[rgba\(245\2c 158\2c 11\2c 0\.12\)\]   { background-color: hsl(var(--warning-soft)) !important; }
+.bg-\[rgba\(245\2c 158\2c 11\2c 0\.15\)\]   { background-color: hsl(var(--warning-soft)) !important; }
+.bg-\[rgba\(245\2c 158\2c 11\2c 0\.18\)\]   { background-color: hsl(var(--warning-soft)) !important; }
+.bg-\[rgba\(248\2c 113\2c 113\2c 0\.07\)\]  { background-color: hsl(var(--danger-soft)) !important; }
+.bg-\[rgba\(248\2c 113\2c 113\2c 0\.12\)\]  { background-color: hsl(var(--danger-soft)) !important; }
+.bg-\[rgba\(248\2c 113\2c 113\2c 0\.15\)\]  { background-color: hsl(var(--danger-soft)) !important; }
+.bg-\[rgba\(248\2c 113\2c 113\2c 0\.18\)\]  { background-color: hsl(var(--danger-soft)) !important; }
+.bg-\[rgba\(248\2c 113\2c 113\2c 0\.25\)\]  { background-color: hsl(var(--danger-soft)) !important; }
+.bg-\[rgba\(52\2c 211\2c 153\2c 0\.07\)\]   { background-color: hsl(var(--success-soft)) !important; }
+.bg-\[rgba\(52\2c 211\2c 153\2c 0\.1\)\]    { background-color: hsl(var(--success-soft)) !important; }
+.bg-\[rgba\(52\2c 211\2c 153\2c 0\.15\)\]   { background-color: hsl(var(--success-soft)) !important; }
+.bg-\[rgba\(52\2c 211\2c 153\2c 0\.18\)\]   { background-color: hsl(var(--success-soft)) !important; }
+.bg-\[rgba\(34\2c 197\2c 94\2c 0\.18\)\]    { background-color: hsl(var(--success) / 0.18) !important; }
+.bg-\[rgba\(34\2c 197\2c 94\2c 0\.36\)\]    { background-color: hsl(var(--success) / 0.18) !important; }
+.bg-\[rgba\(34\2c 197\2c 94\2c 0\.58\)\]    { background-color: hsl(var(--success) / 0.32) !important; }
+.bg-\[rgba\(34\2c 211\2c 238\2c 0\.15\)\]   { background-color: hsl(var(--info-soft)) !important; }
+.bg-\[rgba\(16\2c 185\2c 129\2c 0\.1\)\]    { background-color: hsl(var(--success-soft)) !important; }
+.bg-\[rgba\(16\2c 185\2c 129\2c 0\.12\)\]   { background-color: hsl(var(--success-soft)) !important; }
+.bg-\[rgba\(168\2c 85\2c 247\2c 0\.12\)\]   { background-color: hsl(var(--brand-50)) !important; }
+.bg-\[rgba\(17\2c 24\2c 39\2c 0\.42\)\]     { background-color: hsl(var(--bg-muted)) !important; }
+.bg-\[rgba\(17\2c 24\2c 39\2c 0\.72\)\]     { background-color: hsl(var(--surface)) !important; }
+.bg-\[rgba\(18\2c 20\2c 40\2c 0\.98\)\]     { background-color: hsl(var(--surface)) !important; }
+.bg-\[rgba\(10\2c 12\2c 28\2c 0\.98\)\]     { background-color: hsl(var(--surface)) !important; }
+.bg-\[rgba\(10\2c 15\2c 30\2c 0\.28\)\]     { background-color: hsl(var(--surface)) !important; }
+.bg-\[rgba\(8\2c 12\2c 24\2c 0\.55\)\]      { background-color: hsl(var(--surface)) !important; }
+.bg-\[rgba\(4\2c 6\2c 16\2c 0\.75\)\]       { background-color: hsl(var(--surface)) !important; }
+.bg-\[rgba\(4\2c 6\2c 16\2c 0\.8\)\]        { background-color: hsl(var(--surface)) !important; }
+.bg-\[var\(--color-surface-secondary\)\]   { background-color: hsl(var(--surface)) !important; }
+.bg-\[var\(--color-bg-primary\)\]          { background-color: hsl(var(--bg)) !important; }
+.bg-\[var\(--color-surface-card\)\]        { background-color: hsl(var(--surface)) !important; }
+.bg-\[var\(--color-accent\)\]              { background-color: hsl(var(--brand-500)) !important; }
+.bg-\[var\(--color-accent-hover\)\]        { background-color: hsl(var(--brand-600)) !important; }
+.bg-accent                                { background-color: hsl(var(--brand-500)) !important; }
+.text-accent                              { color: hsl(var(--brand-500)) !important; }
+.border-accent                            { border-color: hsl(var(--brand-500)) !important; }
+.bg-background-primary                    { background-color: hsl(var(--bg)) !important; }
+.bg-background-secondary                  { background-color: hsl(var(--bg-subtle)) !important; }
+.bg-surface-card                          { background-color: hsl(var(--surface)) !important; }
+.bg-surface-secondary                     { background-color: hsl(var(--surface)) !important; }
+.border-surface-border                    { border-color: hsl(var(--border)) !important; }
+.border-\[var\(--color-border\)\]          { border-color: hsl(var(--border)) !important; }
+.text-text-primary                        { color: hsl(var(--fg)) !important; }
+.text-text-secondary                      { color: hsl(var(--fg-muted)) !important; }
+.text-text-muted                          { color: hsl(var(--fg-subtle)) !important; }
+.text-\[\#fff\]                           { color: hsl(var(--fg-inverse)) !important; }
+.text-white                               { color: hsl(var(--fg-inverse)) !important; }
+.text-\[\#ffffff\]                        { color: hsl(var(--fg-inverse)) !important; }
+
+/* Hover variants */
+.hover\:bg-\[rgba\(255\2c 255\2c 255\2c 0\.02\)\]:hover { background-color: hsl(var(--bg-subtle)) !important; }
+.hover\:bg-\[rgba\(255\2c 255\2c 255\2c 0\.03\)\]:hover { background-color: hsl(var(--bg-subtle)) !important; }
+.hover\:bg-\[rgba\(255\2c 255\2c 255\2c 0\.04\)\]:hover { background-color: hsl(var(--bg-muted)) !important; }
+.hover\:bg-\[rgba\(255\2c 255\2c 255\2c 0\.05\)\]:hover { background-color: hsl(var(--bg-muted)) !important; }
+.hover\:bg-\[rgba\(255\2c 255\2c 255\2c 0\.07\)\]:hover { background-color: hsl(var(--bg-muted)) !important; }
+.hover\:bg-\[rgba\(255\2c 255\2c 255\2c 0\.08\)\]:hover { background-color: hsl(var(--bg-muted)) !important; }
+.hover\:bg-\[rgba\(255\2c 255\2c 255\2c 0\.1\)\]:hover  { background-color: hsl(var(--border)) !important; }
+.hover\:text-white:hover                  { color: hsl(var(--fg)) !important; }
+.hover\:text-text-primary:hover           { color: hsl(var(--fg)) !important; }
+
+/* -------------------------------------------------------------------------
+   Accessibility — respect user motion preferences
+   ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
