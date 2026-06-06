@@ -1,6 +1,9 @@
+// @deprecated since Checkpoint 5a — frontend uses supabase.from('Assignment')
+// directly. Kept alive for the legacy HTTP routes until Checkpoint 8 deletion.
 const ApiResponse = require('../utils/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const AssignService = require('../services/assignments.service');
+const NotifService = require('../services/notification.service');
 const { parsePagination } = require('../utils/pagination');
 const { assignmentSchema } = require('../validators/assignment.validator');
 
@@ -20,6 +23,19 @@ async function list(req, res){
 async function create(req, res){
   const payload = assignmentSchema.parse(req.body);
   const a = await AssignService.createAssignment(req.user.id, payload);
+  // Best-effort realtime notification. Failures here must not block the
+  // original create response.
+  try {
+    await NotifService.create(
+      req.user.id,
+      'ASSIGNMENT',
+      `New assignment: ${a.title}`,
+      a.due_date ? `Due ${new Date(a.due_date).toLocaleDateString()}` : null,
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[assignments.create] notification failed:', err?.message || err);
+  }
   return res.status(201).json(ApiResponse.success(a, 'Assignment created', 201));
 }
 
@@ -49,6 +65,21 @@ async function updateStatus(req, res){
   const a = await AssignService.getAssignment(req.params.id);
   if(String(a.user_id) !== String(req.user.id)) return res.status(403).json(ApiResponse.error('Unauthorized', 403));
   const updated = await AssignService.updateStatus(req.params.id, status);
+  try {
+    const action =
+      status === 'SUBMITTED' ? 'submitted' :
+      status === 'COMPLETED' ? 'completed' :
+      'updated';
+    await NotifService.create(
+      req.user.id,
+      'ASSIGNMENT',
+      `${action[0].toUpperCase()}${action.slice(1)}: ${updated.title}`,
+      null,
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[assignments.updateStatus] notification failed:', err?.message || err);
+  }
   return res.json(ApiResponse.success(updated, 'Status updated'));
 }
 

@@ -1,69 +1,117 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ConversationHistory from './ConversationHistory';
 import ChatInterface from './ChatInterface';
 import StudyPlannerPanel from './StudyPlannerPanel';
+import { aiApi } from '../src/api/ai.api';
 
 /**
  * AIStudyAssistant — three-pane chat workspace.
  *
- * Design decisions:
- *   • Removed the full-height dark `100vh` wrapper — AppShell (provided by
- *     ProtectedRoute) now supplies the layout chrome, so the assistant
- *     just renders its three-pane content.
- *   • Removed the DM Sans/Mono font injection — Inter + Outfit are loaded
- *     once via globals.css.
- *   • The three panes use surface Cards so they read as panels, not free
- *     blocks of color. The conversation history and planner panels are
- *     `w-fit` width rather than fixed pixels, so they shrink responsively.
+ * Loads the user's real conversation history from /ai/history on mount
+ * and lets the user start a new chat. No fake placeholders.
  */
 export default function AIStudyAssistant() {
-  const [conversations, setConversations] = useState([
-    {
-      id: 'c1',
-      title: 'DSA study plan',
-      messages: [
-        { id: 'm1', sender: 'ai', type: 'text', text: 'Hi! Ready to plan your DSA study session? Tell me what topics you want to cover.', ts: Date.now() - 3600 * 1000 },
-      ],
-      updatedAt: Date.now() - 3600 * 1000,
-    },
-    {
-      id: 'c2',
-      title: 'OS Summary',
-      messages: [
-        { id: 'm1', sender: 'user', type: 'text', text: 'Summarize Chapter 3', ts: Date.now() - 86400000 },
-      ],
-      updatedAt: Date.now() - 86400000,
-    },
-  ]);
+  const [conversations, setConversations] = useState(null); // null = loading
+  const [activeId, setActiveId] = useState(null);
+  const [loadError, setLoadError] = useState(null);
 
-  const [activeId, setActiveId] = useState(conversations[0]?.id || null);
+  // Load real history on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await aiApi.getHistory();
+        if (cancelled) return;
+        // /ai/history returns one row per conversation with a `preview`.
+        const rows = Array.isArray(res) ? res : (res?.data || []);
+        const list = rows.map((row) => ({
+          id: row.conversation_id,
+          serverId: row.conversation_id,
+          title: row.preview ? row.preview.slice(0, 60) : 'Chat',
+          messages: [],
+          updatedAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+        }));
+        setConversations(list);
+        setActiveId(list[0]?.id || null);
+      } catch (err) {
+        if (cancelled) return;
+        // Non-fatal — fall back to a single empty chat so the UI is still usable.
+        setLoadError(err?.response?.data?.message || err?.message || 'Failed to load history');
+        setConversations([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   function newChat() {
     const id = 'c' + Date.now();
-    const conv = { id, title: 'New chat', messages: [], updatedAt: Date.now() };
-    setConversations((c) => [conv, ...c]);
+    const conv = { id, serverId: null, title: 'New chat', messages: [], updatedAt: Date.now() };
+    setConversations((c) => [conv, ...(c || [])]);
     setActiveId(id);
   }
+
+  function updateConversation(id, patch) {
+    setConversations((all) => (all || []).map((c) => (c.id === id ? { ...c, ...patch, updatedAt: Date.now() } : c)));
+  }
+
+  async function removeConversation(id) {
+    if (!window.confirm('Delete this conversation?')) return;
+    const conv = conversations.find((c) => c.id === id);
+    try {
+      if (conv?.serverId) await aiApi.deleteConversation(conv.serverId);
+    } catch {
+      // Best-effort: still remove from the UI so the user is unblocked.
+    }
+    setConversations((all) => (all || []).filter((c) => c.id !== id));
+    if (activeId === id) {
+      const remaining = (conversations || []).filter((c) => c.id !== id);
+      setActiveId(remaining[0]?.id || null);
+    }
+  }
+
+  const active = (conversations || []).find((c) => c.id === activeId) || null;
 
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col gap-4 lg:h-[calc(100vh-9rem)] lg:flex-row">
       <div className="w-full shrink-0 lg:w-60">
         <ConversationHistory
-          conversations={conversations}
-          setConversations={setConversations}
+          conversations={conversations || []}
           activeId={activeId}
-          setActiveId={setActiveId}
+          onSelect={setActiveId}
           onNew={newChat}
+          onDelete={removeConversation}
         />
       </div>
 
       <div className="min-w-0 flex-1">
-        <ChatInterface
-          conversations={conversations}
-          activeId={activeId}
-          setConversations={setConversations}
-          setActiveId={setActiveId}
-        />
+        {active ? (
+          <ChatInterface
+            conversation={active}
+            onTitleUpdate={(id, patch) => updateConversation(id, patch)}
+          />
+        ) : (
+          <div className="grid h-full place-items-center rounded-2xl border border-border bg-surface text-sm text-foreground-muted">
+            {conversations === null
+              ? 'Loading conversations…'
+              : loadError
+                ? `Couldn't load history — ${loadError}`
+                : (
+                  <div className="flex flex-col items-center gap-3 p-6 text-center">
+                    <div className="text-base font-semibold text-foreground">No conversations yet</div>
+                    <div className="max-w-sm text-xs text-foreground-muted">
+                      Start a new chat and SYNC AI will remember it for next time.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={newChat}
+                      className="mt-1 inline-flex items-center gap-1 rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-brand-600"
+                    >
+                      Start a new chat
+                    </button>
+                  </div>
+                )}
+          </div>
+        )}
       </div>
 
       <div className="w-full shrink-0 overflow-y-auto scrollbar-subtle lg:w-72">

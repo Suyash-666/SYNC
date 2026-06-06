@@ -1,20 +1,29 @@
-import { apiClient } from './client';
-import { unwrap } from './helpers';
+// ============================================================================
+// src/api/analytics.api.js
+// Facade: picks the legacy or Supabase-backed implementation based on the
+// 'analytics' feature flag. When VITE_USE_SUPABASE is unset / empty /
+// 0 / false, the legacy default below is used and behavior is byte-for-
+// byte identical to before Checkpoint 7.
+// ============================================================================
 
-export const analyticsApi = {
-  getOverview: async () => unwrap(await apiClient.get('/analytics/overview')),
-  getAttendance: async (period = '7d') => unwrap(await apiClient.get('/analytics/attendance', { params: { period } })),
-  getAssignments: async (period = '30d') => unwrap(await apiClient.get('/analytics/assignments', { params: { period } })),
-  getStudyHours: async () => unwrap(await apiClient.get('/analytics/study-hours')),
-  getProductivity: async () => unwrap(await apiClient.get('/analytics/productivity')),
-  getSubjects: async () => unwrap(await apiClient.get('/analytics/subjects')),
-};
+import { isEnabled } from '../lib/featureFlags';
+import legacy from './analytics.api.legacy';
+import supabaseImpl from './analytics.api.supabase';
 
-// backward-compatibility aliases
-analyticsApi.overview = analyticsApi.getOverview;
-analyticsApi.attendance = analyticsApi.getAttendance;
-analyticsApi.assignments = analyticsApi.getAssignments;
-analyticsApi.productivity = analyticsApi.getProductivity;
-analyticsApi.subjects = analyticsApi.getSubjects;
+const useSupabase = isEnabled('analytics');
+
+export const analyticsApi = useSupabase ? supabaseImpl : legacy;
+
+export const getOverview = analyticsApi.getOverview;
+export const overview = analyticsApi.overview;
+export const getAttendance = analyticsApi.getAttendance;
+export const attendance = analyticsApi.attendance;
+export const getAssignments = analyticsApi.getAssignments;
+export const assignments = analyticsApi.assignments;
+export const getStudyHours = analyticsApi.getStudyHours;
+export const getProductivity = analyticsApi.getProductivity;
+export const productivity = analyticsApi.productivity;
+export const getSubjects = analyticsApi.getSubjects;
+export const subjects = analyticsApi.subjects;
 
 export default analyticsApi;

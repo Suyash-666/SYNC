@@ -33,7 +33,7 @@ export function useNotes(folder = '', search = '') {
   });
 
   return {
-    notes: (notesQuery.data || []).map(mapNote),
+    notes: ((notesQuery.data?.data) || []).map(mapNote),
     folders: foldersQuery.data || [],
     isLoading: notesQuery.isLoading || foldersQuery.isLoading,
     error: notesQuery.error || foldersQuery.error,

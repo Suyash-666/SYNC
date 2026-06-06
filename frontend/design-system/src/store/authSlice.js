@@ -1,29 +1,34 @@
 import { createSlice } from '@reduxjs/toolkit';
 
 const loadPersistedAuth = () => {
-  if (typeof window === 'undefined') return { user: null, accessToken: null, isAuthenticated: false };
+  if (typeof window === 'undefined') {
+    return { user: null, supabaseSession: null, isAuthenticated: false };
+  }
   try {
     const raw = window.localStorage.getItem('sync_auth');
-    if (!raw) return { user: null, accessToken: null, isAuthenticated: false };
+    if (!raw) return { user: null, supabaseSession: null, isAuthenticated: false };
     const parsed = JSON.parse(raw);
     return {
       user: parsed.user ?? null,
-      accessToken: parsed.accessToken ?? null,
-      isAuthenticated: Boolean(parsed.accessToken),
+      supabaseSession: parsed.supabaseSession ?? null,
+      isAuthenticated: Boolean(parsed.supabaseSession?.access_token),
     };
   } catch {
-    return { user: null, accessToken: null, isAuthenticated: false };
+    return { user: null, supabaseSession: null, isAuthenticated: false };
   }
 };
 
 const persistAuth = (state) => {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem('sync_auth', JSON.stringify({ user: state.user, accessToken: state.accessToken }));
+  window.localStorage.setItem(
+    'sync_auth',
+    JSON.stringify({ user: state.user, supabaseSession: state.supabaseSession })
+  );
 };
 
 const initialState = {
   user: loadPersistedAuth().user,
-  accessToken: loadPersistedAuth().accessToken,
+  supabaseSession: loadPersistedAuth().supabaseSession,
   isAuthenticated: loadPersistedAuth().isAuthenticated,
   isLoading: false,
   sessionChecked: false,
@@ -36,11 +41,11 @@ const authSlice = createSlice({
     setLoading(state, action) {
       state.isLoading = action.payload;
     },
-    setCredentials(state, action) {
-      const { user, accessToken } = action.payload || {};
+    setSession(state, action) {
+      const { user, supabaseSession } = action.payload || {};
       state.user = user ?? state.user;
-      state.accessToken = accessToken ?? state.accessToken;
-      state.isAuthenticated = Boolean(state.accessToken);
+      state.supabaseSession = supabaseSession ?? state.supabaseSession;
+      state.isAuthenticated = Boolean(state.supabaseSession?.access_token);
       state.isLoading = false;
       state.sessionChecked = true;
       persistAuth(state);
@@ -50,7 +55,7 @@ const authSlice = createSlice({
     },
     logout(state) {
       state.user = null;
-      state.accessToken = null;
+      state.supabaseSession = null;
       state.isAuthenticated = false;
       state.isLoading = false;
       state.sessionChecked = true;
@@ -61,5 +66,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { setLoading, setCredentials, setSessionChecked, logout } = authSlice.actions;
+export const { setLoading, setSession, setSessionChecked, logout } = authSlice.actions;
 export default authSlice.reducer;

@@ -13,3 +13,4 @@ export { default as AppShell } from './AppShell';
 export { default as SlideMenu } from './SlideMenu';
 export { default as ProfileMenu } from './ProfileMenu';
 export { default as EmptyState } from '../errors/EmptyState';
+export { default as CardShell } from './CardShell';

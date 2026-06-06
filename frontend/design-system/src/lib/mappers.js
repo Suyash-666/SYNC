@@ -1,5 +1,19 @@
 export const lower = (value) => String(value || '').toLowerCase();
 
+// Assignment status enums from Postgres: TODO | IN_PROGRESS | REVIEW | SUBMITTED.
+// The UI kanban column keys are: todo | inprogress | review | submitted (no
+// underscore on inprogress). `lower()` alone would produce "in_progress",
+// which the column filter `item.status === 'inprogress'` would never match.
+const assignmentStatusToUi = (dbStatus) => {
+  switch (dbStatus) {
+    case 'TODO':        return 'todo';
+    case 'IN_PROGRESS': return 'inprogress';
+    case 'REVIEW':      return 'review';
+    case 'SUBMITTED':   return 'submitted';
+    default:            return lower(dbStatus || 'TODO');
+  }
+};
+
 export const mapAssignment = (item) => ({
   id: item.id,
   title: item.title,
@@ -8,7 +22,7 @@ export const mapAssignment = (item) => ({
   priority: item.priority ? item.priority[0] + item.priority.slice(1).toLowerCase() : 'Medium',
   dueDate: item.due_date || item.dueDate,
   progress: item.status === 'SUBMITTED' ? 100 : item.status === 'REVIEW' ? 80 : item.status === 'IN_PROGRESS' ? 45 : 0,
-  status: lower(item.status || 'TODO'),
+  status: assignmentStatusToUi(item.status),
   submittedAt: item.submitted_at,
 });
 
@@ -22,15 +36,28 @@ export const mapNote = (item) => ({
   updatedAt: item.updated_at ? new Date(item.updated_at).getTime() : Date.now(),
 });
 
-export const mapNotification = (item) => ({
-  id: item.id,
-  type: item.type,
-  title: item.title,
-  body: item.body,
-  ts: item.created_at ? new Date(item.created_at).getTime() : Date.now(),
-  unread: !item.is_read,
-  is_read: item.is_read,
-});
+export const mapNotification = (item) => {
+  if (!item) return null;
+  let ts = Date.now();
+  try {
+    if (item.created_at) {
+      const d = new Date(item.created_at);
+      const t = d.getTime();
+      ts = Number.isFinite(t) ? t : Date.now();
+    }
+  } catch (_) {
+    ts = Date.now();
+  }
+  return {
+    id: item.id,
+    type: item.type,
+    title: item.title || '',
+    body: item.body || '',
+    ts,
+    unread: !item.is_read,
+    is_read: !!item.is_read,
+  };
+};
 
 export const mapResource = (item) => ({
   id: item.id,

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Search, LayoutGrid, List, Calendar as CalendarIcon, X, KanbanSquare } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { Plus, Search, List, Calendar as CalendarIcon, X, KanbanSquare } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -13,6 +13,8 @@ import {
   Toast,
 } from '../components';
 import AssignmentCard from './AssignmentCard';
+import AssignmentList from './AssignmentList';
+import AssignmentCalendar from './AssignmentCalendar';
 import AddAssignmentModal from './AddAssignmentModal';
 import AssignmentDetailModal from './AssignmentDetailModal';
 import { useAssignments } from '../src/hooks/useAssignments';
@@ -81,11 +83,18 @@ export default function AssignmentsPage() {
 
   const handleCreate = async (values) => {
     try {
+      // The date input returns "YYYY-MM-DD" which `new Date()` parses as
+      // midnight UTC. That is in the past for any "today" selection, so
+      // treat the user-picked day as end-of-day local time, falling back
+      // to "now" when no date was chosen.
+      const dueDateIso = values.dueDate
+        ? new Date(`${values.dueDate}T23:59:59`).toISOString()
+        : new Date().toISOString();
       await createAssignment({
         title: values.title,
         description: values.description,
         priority: values.priority?.toUpperCase(),
-        due_date: values.dueDate ? new Date(values.dueDate).toISOString() : new Date().toISOString(),
+        due_date: dueDateIso,
         status: 'TODO',
       });
       showToast('success', 'Assignment created.');
@@ -95,9 +104,20 @@ export default function AssignmentsPage() {
     }
   };
 
+  // UI column keys (todo | inprogress | review | submitted) -> Postgres
+  // AssignmentStatus enum values. The kanban keeps "inprogress" as a single
+  // word for filter friendliness; the column is "IN_PROGRESS" with an
+  // underscore in the database.
+  const uiToDbStatus = (s) => ({
+    todo: 'TODO',
+    inprogress: 'IN_PROGRESS',
+    review: 'REVIEW',
+    submitted: 'SUBMITTED',
+  })[s] || 'TODO';
+
   const handleUpdateStatus = async (item) => {
     try {
-      await updateStatus({ id: item.id, status: item.status.toUpperCase() });
+      await updateStatus({ id: item.id, status: uiToDbStatus(item.status) });
       showToast('success', 'Status updated.');
     } catch (err) {
       showToast('error', err.message || 'Unable to update status.');
@@ -183,27 +203,41 @@ export default function AssignmentsPage() {
 
       {/* Filters */}
       <Card padding="sm">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-end gap-3">
           <Select
+            label="Subject"
             value={subjectFilter}
             onChange={(e) => setSubjectFilter(e.target.value)}
-            className="w-40"
+            className="w-44"
           >
             {subjectOptions.map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
           </Select>
           <Select
+            label="Priority"
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
-            className="w-36"
+            className="w-40"
           >
             {['All', 'High', 'Medium', 'Low'].map((p) => (
               <option key={p} value={p}>{p}</option>
             ))}
           </Select>
-          <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-40" />
-          <Input type="date" value={toDate}   onChange={(e) => setToDate(e.target.value)}   className="w-40" />
+          <Input
+            type="date"
+            label="Due from"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="w-44"
+          />
+          <Input
+            type="date"
+            label="Due to"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="w-44"
+          />
           {filtersActive ? (
             <Button
               variant="ghost"
@@ -219,7 +253,7 @@ export default function AssignmentsPage() {
               Clear
             </Button>
           ) : null}
-          <span className="ml-auto font-mono text-2xs text-foreground-subtle">
+          <span className="ml-auto pb-2 font-mono text-2xs text-foreground-subtle">
             {filtered.length} assignment{filtered.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -270,16 +304,10 @@ export default function AssignmentsPage() {
             );
           })}
         </div>
+      ) : view === 'list' ? (
+        <AssignmentList items={filtered} onOpen={setDetailItem} />
       ) : (
-        <Card padding="lg">
-          <EmptyState
-            icon={<LayoutGrid className="h-6 w-6" />}
-            title={`${view[0].toUpperCase() + view.slice(1)} view coming soon`}
-            description="Kanban is currently wired to live backend data."
-            actionLabel="Switch to Kanban"
-            onAction={() => setView('kanban')}
-          />
-        </Card>
+        <AssignmentCalendar items={filtered} onOpen={setDetailItem} />
       )}
 
       <AddAssignmentModal

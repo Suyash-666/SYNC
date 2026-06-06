@@ -1,3 +1,5 @@
+// @deprecated since Checkpoint 5f — frontend uses supabase.from('PlacementProgress')
+// directly. Kept alive for the legacy HTTP routes until Checkpoint 8 deletion.
 const ApiResponse = require('../utils/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const PlacementService = require('../services/placement.service');

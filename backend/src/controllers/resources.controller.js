@@ -1,3 +1,5 @@
+// @deprecated since Checkpoint 3 — frontend uploads directly to Supabase
+// Storage. Kept alive for the legacy HTTP routes until Checkpoint 8 deletion.
 const ApiResponse = require('../utils/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const ResourcesService = require('../services/resources.service');

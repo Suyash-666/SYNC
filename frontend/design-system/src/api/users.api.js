@@ -1,14 +1,21 @@
-import { apiClient } from './client';
-import { unwrap } from './helpers';
+// ============================================================================
+// src/api/users.api.js
+// Facade: picks the legacy or Supabase-backed implementation based on the
+// 'crud' feature flag. When VITE_USE_SUPABASE is unset / empty / 0 / false,
+// the legacy default below is used and behavior is byte-for-byte identical
+// to before Checkpoint 7.
+// ============================================================================
 
-export const usersApi = {
-  getProfile: async () => unwrap(await apiClient.get('/users/profile')),
-  updateProfile: async (payload) =>
-    unwrap(await apiClient.patch('/users/profile', payload)),
-  deleteAccount: async () =>
-    unwrap(await apiClient.delete('/users/account')),
-  onboarding: async (payload) =>
-    unwrap(await apiClient.post('/users/onboarding', payload)),
-};
+import { isEnabled } from '../lib/featureFlags';
+import legacy from './users.api.legacy';
+import supabaseImpl from './users.api.supabase';
+
+const useSupabase = isEnabled('crud');
+
+export const usersApi = useSupabase ? supabaseImpl : legacy;
+export const getProfile = usersApi.getProfile;
+export const updateProfile = usersApi.updateProfile;
+export const deleteAccount = usersApi.deleteAccount;
+export const onboarding = usersApi.onboarding;
 
 export default usersApi;

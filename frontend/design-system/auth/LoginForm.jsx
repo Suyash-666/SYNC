@@ -4,9 +4,10 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Chrome, Github, Lock, Mail } from 'lucide-react';
-import { authApi } from '../src/api';
-import { setCredentials } from '../src/store/authSlice';
+import { getSupabase } from '../src/lib/supabase';
+import { setSession } from '../src/store/authSlice';
 import { syncSocketAuth } from '../src/lib/socket';
 import { Button, Input } from '../components';
 
@@ -18,6 +19,7 @@ const schema = z.object({
 export const LoginForm = ({ onSwitch, onNotify }) => {
   const [loading, setLoading] = useState(false);
   const dispatch = useDispatch();
+  const navigate = useNavigate();
 
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
@@ -27,12 +29,29 @@ export const LoginForm = ({ onSwitch, onNotify }) => {
   const submit = async (values) => {
     setLoading(true);
     try {
-      const data = await authApi.login(values);
-      dispatch(setCredentials({ user: data.user, accessToken: data.access || data.accessToken }));
+      const supabase = getSupabase();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
+      });
+      if (error) throw error;
+      if (!data?.session || !data?.user) throw new Error('No session returned.');
+
+      // The User row in "User" must already exist (id aligned with auth.users.id)
+      // by the SQL alignment migration. Pull the profile so the rest of the
+      // app has full_name/avatar_url.
+      const { data: profile } = await supabase
+        .from('User')
+        .select('*')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      dispatch(setSession({ user: profile || data.user, supabaseSession: data.session }));
       syncSocketAuth();
       onNotify('success', 'Welcome back. You are signed in.');
+      navigate('/dashboard', { replace: true });
     } catch (error) {
-      onNotify('error', error.response?.data?.message || error.message || 'Unable to log in.');
+      onNotify('error', error.message || 'Unable to log in.');
     } finally {
       setLoading(false);
     }

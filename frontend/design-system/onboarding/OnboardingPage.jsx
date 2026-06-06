@@ -11,7 +11,7 @@ import {
   Check,
 } from 'lucide-react';
 import { onboardingApi } from '../src/api';
-import { setCredentials } from '../src/store/authSlice';
+import { setSession } from '../src/store/authSlice';
 import { Button, Card, CardEyebrow, Input, Select, Badge } from '../components';
 
 /**
@@ -55,7 +55,7 @@ const interestOptions = [
 export const OnboardingPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const accessToken = useSelector((state) => state.auth.accessToken);
+  const supabaseSession = useSelector((state) => state.auth.supabaseSession);
   const user = useSelector((state) => state.auth.user);
 
   const [step, setStep] = useState(0);
@@ -117,7 +117,7 @@ export const OnboardingPage = () => {
     try {
       const result = await onboardingApi.submit(form);
       const nextUser = result?.user || result?.data?.user || { ...user, is_onboarded: true, isOnboarded: true };
-      dispatch(setCredentials({ user: nextUser, accessToken }));
+      dispatch(setSession({ user: nextUser, supabaseSession }));
       navigate('/dashboard', { replace: true });
     } catch (submissionError) {
       setError(submissionError?.response?.data?.message || 'Could not finish onboarding.');

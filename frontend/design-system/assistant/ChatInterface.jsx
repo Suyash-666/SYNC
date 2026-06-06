@@ -1,37 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Sparkles, Copy, Check } from 'lucide-react';
+import { Send, Sparkles, Copy, Check, AlertCircle } from 'lucide-react';
+import { aiApi } from '../src/api/ai.api';
 import PromptSuggestions from './PromptSuggestions';
 
 /**
  * ChatInterface — AI Assistant chat panel.
  *
- * Design decisions:
- *   • Light theme. The previous version was a dark glass card with hard-
- *     coded `rgba(255,255,255,...)` tints and `'#fff'` text that rendered
- *     as invisible-on-white. Now everything maps to design tokens.
- *   • User bubbles use the brand color (indigo). AI bubbles use a soft
- *     surface with a subtle border. This is the same convention used by
- *     ChatGPT, Claude, and every modern AI chat.
- *   • Code blocks render with a tinted brand background and monospace.
- *   • The composer uses a single text input + send button, both styled
- *     to match the new Input primitive.
+ * Talks to the real backend (POST /api/v1/ai/chat) which proxies the
+ * request to the OpenAI-compatible provider configured on the server
+ * (Groq + llama-3.3-70b-versatile by default). Conversation history is
+ * persisted server-side and re-loaded on mount, so refreshing the page
+ * does not lose the chat.
  */
-
-const AI_RESPONSES = [
-  [
-    { type: 'text', text: "Here's a concise explanation of recursion: a function calls itself until it reaches a base case. It elegantly solves problems that can be broken into smaller sub-problems of the same type." },
-    { type: 'list', items: ['Base case — stops the recursion', 'Recursive case — calls itself with a smaller input', 'Example: factorial, Fibonacci, tree traversal'] },
-  ],
-  [
-    { type: 'text', text: "Here's a focused 5-day DBMS study plan:" },
-    { type: 'table', rows: [['Day', 'Focus Area'], ['Day 1', 'ER Diagrams & Normalisation'], ['Day 2', 'SQL Queries & Joins'], ['Day 3', 'Transactions & ACID'], ['Day 4', 'Indexing & Query Optimisation'], ['Day 5', 'Mock test + revision']] },
-  ],
-  [
-    { type: 'text', text: "Here's an efficient Fibonacci implementation using memoisation:" },
-    { type: 'code', lang: 'javascript', code: 'const memo = {};\nfunction fib(n) {\n  if (n <= 1) return n;\n  if (memo[n]) return memo[n];\n  return (memo[n] = fib(n - 1) + fib(n - 2));\n}\n\nconsole.log(fib(10)); // 55' },
-  ],
-];
 
 function TypingIndicator() {
   return (
@@ -73,6 +54,59 @@ function CodeBlock({ code, lang }) {
   );
 }
 
+/**
+ * Render a plain-text assistant reply into a sequence of blocks:
+ *   - fenced ```code```        → code block
+ *   - lines starting with "- " → bullet list
+ *   - everything else          → paragraph
+ * This keeps the message-bubble styles (text/list/code/table) used
+ * elsewhere in the assistant, without us needing the AI to emit JSON.
+ */
+function renderBlocks(text) {
+  if (!text) return [];
+  const blocks = [];
+  const lines = text.split(/\r?\n/);
+  let i = 0;
+  let buf = [];
+  const flushParagraph = () => {
+    if (buf.length) {
+      blocks.push({ type: 'text', text: buf.join('\n') });
+      buf = [];
+    }
+  };
+  while (i < lines.length) {
+    const line = lines[i];
+    const fence = line.match(/^```(\w+)?\s*$/);
+    if (fence) {
+      flushParagraph();
+      const lang = fence[1] || '';
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) {
+        codeLines.push(lines[i]); i++;
+      }
+      i++; // skip closing fence
+      blocks.push({ type: 'code', lang, code: codeLines.join('\n') });
+      continue;
+    }
+    if (/^\s*[-*]\s+/.test(line)) {
+      flushParagraph();
+      const items = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*[-*]\s+/, ''));
+        i++;
+      }
+      blocks.push({ type: 'list', items });
+      continue;
+    }
+    if (line.trim() === '') { flushParagraph(); i++; continue; }
+    buf.push(line);
+    i++;
+  }
+  flushParagraph();
+  return blocks;
+}
+
 function MessageBubble({ m }) {
   const isUser = m.sender === 'user';
 
@@ -84,12 +118,27 @@ function MessageBubble({ m }) {
         animate={{ opacity: 1, y: 0, x: 0 }}
         className="flex justify-end"
       >
-        <div className="max-w-[70%] rounded-2xl rounded-br-sm bg-brand-500 px-4 py-2.5 text-sm leading-relaxed text-brand-foreground shadow-sm">
+        <div className="max-w-[70%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-brand-500 px-4 py-2.5 text-sm leading-relaxed text-brand-foreground shadow-sm">
           {m.text}
         </div>
       </motion.div>
     );
   }
+
+  if (m.error) {
+    return (
+      <motion.div layout initial={{ opacity: 0, y: 6, x: -16 }} animate={{ opacity: 1, y: 0, x: 0 }} className="flex max-w-[80%] items-start gap-2.5">
+        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-danger-soft text-danger">
+          <AlertCircle className="h-3.5 w-3.5" />
+        </div>
+        <div className="rounded-2xl rounded-tl-sm border border-danger/30 bg-danger-soft px-4 py-2.5 text-sm leading-relaxed text-foreground shadow-xs">
+          {m.text}
+        </div>
+      </motion.div>
+    );
+  }
+
+  const blocks = m.blocks || renderBlocks(m.text);
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 6, x: -16 }} animate={{ opacity: 1, y: 0, x: 0 }} className="flex max-w-[80%] items-start gap-2.5">
@@ -97,97 +146,107 @@ function MessageBubble({ m }) {
         <Sparkles className="h-3.5 w-3.5" />
       </div>
       <div className="flex flex-col gap-2">
-        {m.type === 'text' && (
-          <div className="rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-2.5 text-sm leading-relaxed text-foreground shadow-xs">
-            {m.text}
-          </div>
-        )}
-
-        {m.type === 'list' && (
-          <div className="rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3 shadow-xs">
-            <ul className="flex flex-col gap-1.5">
-              {m.items.map((it, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-foreground">
-                  <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-md bg-brand-50 font-mono text-2xs font-bold text-brand-700">
-                    {i + 1}
-                  </span>
-                  {it}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {m.type === 'code' && <CodeBlock code={m.code} lang={m.lang} />}
-
-        {m.type === 'table' && (
-          <div className="overflow-hidden rounded-2xl rounded-tl-sm border border-border">
-            <table className="w-full text-sm">
-              <tbody>
-                {m.rows.map((r, ri) => (
-                  <tr key={ri} className={ri === 0 ? 'bg-background-subtle' : ri % 2 === 0 ? 'bg-background' : ''}>
-                    {r.map((c, ci) => (
-                      <td
-                        key={ci}
-                        className={[
-                          'px-4 py-2',
-                          ri === 0 ? 'font-semibold text-foreground' : 'text-foreground-muted',
-                          ri < m.rows.length - 1 ? 'border-b border-border-subtle' : '',
-                          ci < r.length - 1 ? 'border-r border-border-subtle' : '',
-                        ].join(' ')}
-                      >
-                        {c}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {blocks.map((b, idx) => {
+          if (b.type === 'code') return <CodeBlock key={idx} code={b.code} lang={b.lang} />;
+          if (b.type === 'list') {
+            return (
+              <div key={idx} className="rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3 shadow-xs">
+                <ul className="flex flex-col gap-1.5">
+                  {b.items.map((it, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-foreground">
+                      <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-md bg-brand-50 font-mono text-2xs font-bold text-brand-700">
+                        {i + 1}
+                      </span>
+                      {it}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          }
+          return (
+            <div key={idx} className="whitespace-pre-wrap rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-2.5 text-sm leading-relaxed text-foreground shadow-xs">
+              {b.text}
+            </div>
+          );
+        })}
       </div>
     </motion.div>
   );
 }
 
-export default function ChatInterface({ conversations, activeId, setConversations, setActiveId }) {
+export default function ChatInterface({ conversation, onTitleUpdate, onNewConversation }) {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [error, setError] = useState(null);
   const scrollRef = useRef(null);
-
-  const active = conversations.find((c) => c.id === activeId) || conversations[0];
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [active?.messages, isTyping]);
+  }, [conversation?.messages, isTyping]);
 
-  const send = () => {
+  const send = async () => {
     const text = input.trim();
-    if (!text || isTyping || !active) return;
+    if (!text || isTyping || !conversation) return;
 
     const userMsg = { id: 'u' + Date.now(), sender: 'user', type: 'text', text, ts: Date.now() };
-    setConversations((all) =>
-      all.map((c) => (c.id === active.id ? { ...c, messages: [...c.messages, userMsg] } : c)),
-    );
+    const tempAiId = 'a' + Date.now();
+
+    // Optimistic update so the user sees their message immediately.
+    onTitleUpdate(conversation.id, {
+      ...conversation,
+      messages: [
+        ...conversation.messages,
+        userMsg,
+        { id: tempAiId, sender: 'ai', type: 'text', text: '', ts: Date.now() + 1 },
+      ],
+    });
     setInput('');
     setIsTyping(true);
+    setError(null);
 
-    setTimeout(() => {
-      const response = AI_RESPONSES[Math.floor(Math.random() * AI_RESPONSES.length)];
-      const aiMsg = {
-        id: 'a' + Date.now(),
-        sender: 'ai',
-        type: 'multi',
-        blocks: response,
-        ts: Date.now(),
-      };
-      setConversations((all) =>
-        all.map((c) => (c.id === active.id ? { ...c, messages: [...c.messages, aiMsg] } : c)),
-      );
+    try {
+      const res = await aiApi.chat({
+        message: text,
+        conversation_id: conversation.serverId, // undefined for a brand-new chat
+      });
+      const reply = res?.response ?? res?.data?.response ?? '';
+
+      // First user message → use it as the conversation title.
+      const title = conversation.messages.length === 0
+        ? text.slice(0, 60) + (text.length > 60 ? '…' : '')
+        : conversation.title;
+
+      onTitleUpdate(conversation.id, {
+        ...conversation,
+        title,
+        serverId: res?.conversation_id ?? conversation.serverId,
+        messages: [
+          ...conversation.messages,
+          userMsg,
+          { id: tempAiId, sender: 'ai', type: 'text', text: reply, ts: Date.now() },
+        ],
+      });
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error?.message ||
+        err?.message ||
+        'Failed to reach the AI service. Please try again.';
+      setError(message);
+      onTitleUpdate(conversation.id, {
+        ...conversation,
+        messages: [
+          ...conversation.messages,
+          userMsg,
+          { id: tempAiId, sender: 'ai', error: true, type: 'text', text: message, ts: Date.now() },
+        ],
+      });
+    } finally {
       setIsTyping(false);
-    }, 1100);
+    }
   };
 
   return (
@@ -199,7 +258,7 @@ export default function ChatInterface({ conversations, activeId, setConversation
             <Sparkles className="h-4 w-4" />
           </div>
           <div>
-            <div className="text-sm font-semibold text-foreground">{active?.title || 'New chat'}</div>
+            <div className="text-sm font-semibold text-foreground">{conversation?.title || 'New chat'}</div>
             <div className="text-2xs text-foreground-muted">Powered by SYNC AI</div>
           </div>
         </div>
@@ -207,10 +266,26 @@ export default function ChatInterface({ conversations, activeId, setConversation
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto scrollbar-subtle p-4">
+        {error ? (
+          <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-foreground">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />
+            <span>{error}</span>
+          </div>
+        ) : null}
+
         <AnimatePresence initial={false}>
-          {active?.messages.map((m) => (
-            <MessageBubble key={m.id} m={m} />
-          ))}
+          {conversation?.messages?.length ? (
+            conversation.messages.map((m) => <MessageBubble key={m.id} m={m} />)
+          ) : (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="grid h-full place-items-center"
+            >
+              <PromptSuggestions onPick={(s) => setInput(s)} />
+            </motion.div>
+          )}
           {isTyping ? (
             <motion.div key="typing" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex items-start gap-2.5">
               <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-glow">
@@ -224,10 +299,9 @@ export default function ChatInterface({ conversations, activeId, setConversation
 
       {/* Composer */}
       <div className="border-t border-border-subtle p-3">
-        <PromptSuggestions onSelect={(s) => setInput(s)} />
         <form
           onSubmit={(e) => { e.preventDefault(); send(); }}
-          className="mt-2 flex items-end gap-2"
+          className="flex items-end gap-2"
         >
           <textarea
             value={input}

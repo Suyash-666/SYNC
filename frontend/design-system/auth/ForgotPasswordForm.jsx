@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, ArrowRight, Mail, ShieldCheck } from 'lucide-react';
-import { authApi } from '../src/api';
+import { getSupabase } from '../src/lib/supabase';
 import { Button, Input } from '../components';
 
 const schema = z.object({ email: z.string().email('Enter a valid email address.') });
@@ -21,11 +21,15 @@ export const ForgotPasswordForm = ({ onSwitch, onNotify }) => {
   const submit = async (values) => {
     setLoading(true);
     try {
-      await authApi.forgotPassword(values);
+      const supabase = getSupabase();
+      const redirectTo =
+        typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined;
+      const { error } = await supabase.auth.resetPasswordForEmail(values.email, { redirectTo });
+      if (error) throw error;
       setSent(true);
       onNotify('success', 'Reset link sent to your email.');
     } catch (error) {
-      onNotify('error', error.response?.data?.message || error.message || 'Unable to send reset link.');
+      onNotify('error', error.message || 'Unable to send reset link.');
     } finally {
       setLoading(false);
     }
@@ -58,7 +62,7 @@ export const ForgotPasswordForm = ({ onSwitch, onNotify }) => {
         <div className="text-2xs font-semibold uppercase tracking-[0.16em] text-foreground-subtle">
           Account recovery
         </div>
-        <h2 className="mt-2 font-display text-3xl font-semibold text-foreground sm:text-4xl">
+        <h2 className="mt-2 font-display text-3xl font-semibold text-foreground">
           Reset your password
         </h2>
         <p className="mt-3 text-sm leading-6 text-foreground-muted">

@@ -1,3 +1,5 @@
+// @deprecated since Checkpoint 7 — frontend uses analytics_* views
+// directly. Kept alive for the legacy HTTP routes until Checkpoint 8 deletion.
 const ApiResponse = require('../utils/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const Analytics = require('../services/analytics.service');

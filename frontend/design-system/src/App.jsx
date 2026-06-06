@@ -8,8 +8,6 @@ import { ProtectedRoute } from './routes/ProtectedRoute';
 
 import ErrorBoundary from './components/ErrorBoundary';
 
-import { authApi } from './api';
-
 import {
   connectSockets,
   disconnectSockets,
@@ -18,10 +16,13 @@ import {
 
 import {
   logout,
-  setCredentials,
+  setSession,
   setLoading,
   setSessionChecked,
 } from './store/authSlice';
+
+import { getSupabase } from './lib/supabase';
+import { usersApi } from './api';
 
 // Pages
 import DashboardPage from '../dashboard/DashboardPage.jsx';
@@ -30,6 +31,7 @@ import NotesPage from '../notes/NotesPage.jsx';
 import AnalyticsPage from '../analytics/AnalyticsPage.jsx';
 import AIStudyAssistant from '../assistant/AIStudyAssistant.jsx';
 import StudyRoomsPage from '../study-rooms/StudyRoomsPage.jsx';
+import JoinRoomPage from '../study-rooms/JoinRoomPage.jsx';
 import NotificationsPage from '../notifications/NotificationsPage.jsx';
 import PlacementPage from '../placement/PlacementPage.jsx';
 import SettingsPage from '../settings/SettingsPage.jsx';
@@ -75,80 +77,67 @@ export default function App() {
 
   useEffect(() => {
     let isMounted = true;
+    const supabase = getSupabase();
+
+    // Fetch the public."User" table row and merge it into the redux
+    // `user` so consumers (TopNav, ProfileMenu, Sidebar, etc.) can read
+    // `user.full_name`, `user.avatar_url`, `user.college`, `user.degree`
+    // directly. The `auth.users` object returned by supabase.auth.getUser
+    // has none of those fields — they live on the public."User" row.
+    // We swallow the error (e.g. RLS denied, row missing) so a bad row
+    // never blocks the rest of the app from booting.
+    const fetchProfileRow = async (token) => {
+      try {
+        // usersApi expects the redux token; for the very first call the
+        // token is still being persisted, so we fall back to reading the
+        // access token off the just-fetched session.
+        const accessToken = token || (await supabase.auth.getSession())?.data?.session?.access_token;
+        if (!accessToken) return null;
+        const { getSupabaseForUser } = await import('./lib/supabase');
+        const c = getSupabaseForUser(accessToken);
+        if (!c) return null;
+        const { data: { user: au } } = await c.auth.getUser();
+        if (!au) return null;
+        const { data, error } = await c
+          .from('User')
+          .select('*')
+          .eq('id', au.id)
+          .single();
+        if (error) return null;
+        return data || null;
+      } catch {
+        return null;
+      }
+    };
 
     const restoreSession = async () => {
       dispatch(setLoading(true));
 
       try {
-        // Already have token but no user
-        if (auth.accessToken && !auth.user) {
-          const me = await authApi.getMe();
+        const { data: sessionData } = await supabase.auth.getSession();
+        const session = sessionData?.session || null;
+        if (!session) throw new Error('No session');
 
-          if (!isMounted) return;
-
-          dispatch(
-            setCredentials({
-              user: me,
-              accessToken: auth.accessToken,
-            })
-          );
-
-          syncSocketAuth();
-          connectSockets();
-
-          return;
-        }
-
-        // Already authenticated
-        if (auth.isAuthenticated) {
-          connectSockets();
-
-          dispatch(setSessionChecked(true));
-          dispatch(setLoading(false));
-
-          return;
-        }
-
-        // Try refresh
-        const refreshed = await authApi
-          .refreshToken()
-          .catch(() => null);
-
-        if (!refreshed) {
-          throw new Error('No session');
-        }
-
-        const nextAccess =
-          refreshed.accessToken ||
-          refreshed.access ||
-          refreshed.data?.accessToken ||
-          refreshed.data?.access;
-
-        if (!nextAccess) {
-          throw new Error('Missing access token');
-        }
-
-        const me = await authApi.getMe();
+        const { data: userData } = await supabase.auth.getUser(session.access_token);
+        const user = userData?.user || null;
+        if (!user) throw new Error('No user');
 
         if (!isMounted) return;
 
-        dispatch(
-          setCredentials({
-            user: me,
-            accessToken: nextAccess,
-          })
-        );
+        // Merge the User table row into the redux user so name/avatar
+        // are available everywhere from the first render.
+        const profileRow = await fetchProfileRow(session.access_token);
+        const mergedUser = profileRow ? { ...user, ...profileRow } : user;
 
+        dispatch(setSession({ user: mergedUser, supabaseSession: session }));
         syncSocketAuth();
         connectSockets();
       } catch (error) {
         if (!isMounted) return;
-
         dispatch(logout());
         disconnectSockets();
       } finally {
         if (!isMounted) return;
-
         dispatch(setSessionChecked(true));
         dispatch(setLoading(false));
       }
@@ -156,8 +145,26 @@ export default function App() {
 
     restoreSession();
 
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!isMounted) return;
+      if (newSession) {
+        supabase.auth.getUser(newSession.access_token).then(async ({ data }) => {
+          if (!isMounted) return;
+          const au = data?.user || null;
+          const profileRow = await fetchProfileRow(newSession.access_token);
+          const mergedUser = au && profileRow ? { ...au, ...profileRow } : au;
+          dispatch(setSession({ user: mergedUser, supabaseSession: newSession }));
+          syncSocketAuth();
+        });
+      } else {
+        dispatch(logout());
+        disconnectSockets();
+      }
+    });
+
     return () => {
       isMounted = false;
+      sub?.subscription?.unsubscribe?.();
     };
   }, [dispatch]);
 
@@ -166,9 +173,8 @@ export default function App() {
       disconnectSockets();
       return;
     }
-
     connectSockets();
-  }, [auth.isAuthenticated, auth.accessToken]);
+  }, [auth.isAuthenticated, auth.supabaseSession]);
 
   if (!auth.sessionChecked) {
     return <FullScreenLoading />;
@@ -236,6 +242,11 @@ export default function App() {
             <Route
               path="/study-rooms"
               element={<StudyRoomsPage />}
+            />
+
+            <Route
+              path="/join/:code"
+              element={<JoinRoomPage />}
             />
 
             <Route

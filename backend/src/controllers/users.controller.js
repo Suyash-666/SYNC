@@ -1,3 +1,5 @@
+// @deprecated since Checkpoint 7 — frontend uses supabase.from('User')
+// directly. Kept alive for the legacy HTTP routes until Checkpoint 8 deletion.
 const ApiResponse = require('../utils/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const UsersService = require('../services/users.service');

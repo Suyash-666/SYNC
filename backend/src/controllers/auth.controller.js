@@ -1,3 +1,13 @@
+// @deprecated since Checkpoint 2 — auth now goes through Supabase Auth + a
+// thin legacy JWT issuance layer. Kept alive for the auth endpoints' HTTP
+// routes until Checkpoint 8 deletion (which only happens after production
+// validation per MIGRATION_RULES.md).
+//
+// HALT NOTE: the controller below is the PREVIOUS implementation. A prior
+// edit replaced it with 410 stubs. That change is being reverted pending a
+// caller audit.  Do not switch these endpoints to 410 until every caller
+// (frontend, mobile, scripts, integration tests) has been confirmed to use
+// Supabase Auth directly.
 const AuthService = require('../services/auth.service');
 const ApiResponse = require('../utils/ApiResponse');
 const { JWT_REFRESH_SECRET } = require('../config/env');

@@ -4,7 +4,15 @@ const asyncHandler = require('../utils/asyncHandler');
 const { adapter } = require('../services/ai.service');
 const AIRepo = require('../repositories/ai.repository');
 const { chatSchema, studyPlanSchema } = require('../validators/ai.validator');
+const NotifService = require('../services/notification.service');
 const prisma = require('../config/db');
+
+function summariseReply(text) {
+  if (!text) return null;
+  const clean = String(text).replace(/\s+/g, ' ').trim();
+  if (clean.length < 50) return null; // skip very short acks
+  return clean.length > 140 ? `${clean.slice(0, 137)}…` : clean;
+}
 
 async function chat(req, res){
   const body = chatSchema.parse(req.body);
@@ -22,6 +30,24 @@ async function chat(req, res){
   // save user message and assistant response
   await AIRepo.saveMessage(req.user.id, conversationId, 'USER', body.message);
   await AIRepo.saveMessage(req.user.id, conversationId, 'ASSISTANT', aiRes.text);
+
+  // Fire an AI_SUGGESTION notification when the reply is substantive.
+  // Best-effort: a failure here must never break the chat response.
+  const summary = summariseReply(aiRes.text);
+  if (summary) {
+    try {
+      await NotifService.create(
+        req.user.id,
+        'AI_SUGGESTION',
+        'New AI reply',
+        summary,
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[ai.chat] notification failed:', err?.message || err);
+    }
+  }
+
   return res.json(ApiResponse.success({ conversation_id: conversationId, response: aiRes.text }, 'AI response'));
 }
 
@@ -32,6 +58,20 @@ async function studyPlan(req, res){
   const attendance = await prisma.attendanceRecord.findMany({ where: { user_id: req.user.id }, take: 200 });
   const context = { user: { id: req.user.id }, subjects: payload.subjects, exam_date: payload.exam_date, hours_per_day: payload.hours_per_day, assignments, attendance };
   const plan = await adapter.generateStudyPlan(context);
+
+  // Study plans are always substantive — always notify.
+  try {
+    await NotifService.create(
+      req.user.id,
+      'AI_SUGGESTION',
+      'New study plan ready',
+      `Plan for ${(payload.subjects || []).join(', ') || 'your subjects'}. Tap to view in the assistant.`,
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[ai.studyPlan] notification failed:', err?.message || err);
+  }
+
   return res.json(ApiResponse.success(plan, 'Study plan'));
 }
 

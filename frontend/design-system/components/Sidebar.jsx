@@ -137,8 +137,16 @@ export function Sidebar({ onNavigate }) {
       <div className="border-t border-border-subtle p-3">
         {user ? (
           <div className="flex items-center gap-3 rounded-md p-2">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-foreground text-sm font-semibold text-background">
-              {(user?.full_name || user?.name || user?.email || 'U').slice(0, 1).toUpperCase()}
+            <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-foreground text-sm font-semibold text-background">
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt="Your avatar"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                (user?.full_name || user?.name || user?.email || 'U').slice(0, 1).toUpperCase()
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-foreground">

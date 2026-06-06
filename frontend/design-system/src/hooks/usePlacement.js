@@ -22,10 +22,11 @@ export function usePlacement(filters = {}) {
 
   const dsaQuery = useQuery({ queryKey: ['placement', 'dsa', filters], queryFn: () => placementApi.getDsaProblems(filters) });
 
+  const asArray = (d) => (Array.isArray(d) ? d : (d?.data || []));
   return {
-    progress: (progressQuery.data || []).map(mapPlacementItem),
+    progress: asArray(progressQuery.data).map(mapPlacementItem),
     stats: statsQuery.data,
-    dsaProblems: (dsaQuery.data || []).map(mapPlacementItem),
+    dsaProblems: asArray(dsaQuery.data).map(mapPlacementItem),
     isLoading: progressQuery.isLoading || statsQuery.isLoading || dsaQuery.isLoading,
     error: progressQuery.error || statsQuery.error || dsaQuery.error,
     addItem: addMutation.mutateAsync,

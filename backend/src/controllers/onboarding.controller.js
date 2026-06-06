@@ -1,3 +1,5 @@
+// @deprecated since Checkpoint 5g — frontend calls the onboard_user RPC
+// directly. Kept alive for the legacy HTTP routes until Checkpoint 8 deletion.
 const ApiResponse = require('../utils/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const OnboardingService = require('../services/onboarding.service');

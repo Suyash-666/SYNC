@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
-import { Badge, Button, CardEyebrow, CardTitle, EmptyState, PageHeader, Skeleton, Toast } from '../components';
-import { useAnalytics } from '../src/hooks/useAnalytics';
-import KPICard from './KPICard';
+import { Button, PageHeader, Toast } from '../components';
+import KPIRow from './KPIRow';
 import StudyHoursChart from './StudyHoursChart';
 import AttendanceRadar from './AttendanceRadar';
 import AssignmentCompletion from './AssignmentCompletion';
@@ -10,58 +10,44 @@ import SyllabusCompletion from './SyllabusCompletion';
 import ProductivityPanel from './ProductivityPanel';
 import InsightsPanel from './InsightsPanel';
 
-const formatNumber = (value) => (typeof value === 'number' ? value : 0);
-
-/**
- * AnalyticsPage — chart-heavy overview.
- *
- * Design decisions:
- *   • Removed the dark `pageStyle` wrapper and the DM Sans font injection
- *     — AppShell + globals.css now supply layout and typography.
- *   • Header uses the new PageHeader primitive with a range segmented
- *     control on the right.
- *   • The KPI row stays as 4 columns on lg+; on smaller screens it
- *     collapses to 2. Section dividers use a centered CardEyebrow with
- *     a hairline line on each side, replacing the old "SectionLabel"
- *     component.
- */
 const RANGES = [
   { id: '7d',       label: 'Last 7 days' },
   { id: '30d',      label: 'Last 30 days' },
   { id: 'semester', label: 'Semester' },
 ];
 
+/**
+ * AnalyticsPage — composes independent analytics cards.
+ *
+ * Architectural notes:
+ *   • The page does NOT call a single combined `useAnalytics` hook. Each
+ *     card fetches its own slice of data via its own `useQuery`, so a
+ *     failing endpoint only blanks its own card. Other cards keep
+ *     showing their metadata/placeholder content unchanged.
+ *   • The page also does not block on a top-level `isLoading` flag —
+ *     there isn't one. The page renders as soon as React mounts, and
+ *     each card shows its own skeleton (via CardShell) while its
+ *     specific data is in-flight.
+ *   • The "Refresh" button invalidates the `analytics` query family so
+ *     every card refetches in parallel. No card is dependent on the
+ *     others' state.
+ *   • Range changes are forwarded to each card that supports them via
+ *     the `range` prop. Cards that don't depend on the period (e.g.
+ *     productivity) ignore it.
+ */
 export default function AnalyticsPage() {
   const [range, setRange] = useState('7d');
-  const { overview, attendance, assignments, productivity, subjects, studyHours, isLoading, error, refetch } = useAnalytics(range);
+  const queryClient = useQueryClient();
   const [toast, setToast] = useState({ open: false, variant: 'info', message: '' });
   const showToast = (variant, message) => setToast({ open: true, variant, message });
 
-  if (isLoading) {
-    return (
-      <div className="space-y-5">
-        <div className="space-y-2">
-          <Skeleton variant="line" width="30%" height={28} />
-          <Skeleton variant="line" width="50%" />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} variant="block" className="h-24" />)}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <EmptyState
-        icon="📉"
-        title="Analytics failed to load"
-        description={error.message || 'Unable to fetch analytics data.'}
-        actionLabel="Retry"
-        onAction={refetch}
-      />
-    );
-  }
+  const refreshAll = async () => {
+    // Invalidate every analytics key in parallel. Each card sees its
+    // own query go to "fetching" and renders its own skeleton; the
+    // page itself doesn't change shape.
+    await queryClient.invalidateQueries({ queryKey: ['analytics'] });
+    showToast('success', 'Analytics refreshed.');
+  };
 
   return (
     <div className="space-y-6">
@@ -99,7 +85,7 @@ export default function AnalyticsPage() {
               variant="secondary"
               size="sm"
               leadingIcon={<RefreshCw className="h-3.5 w-3.5" />}
-              onClick={() => { refetch(); showToast('success', 'Analytics refreshed.'); }}
+              onClick={refreshAll}
             >
               Refresh
             </Button>
@@ -107,23 +93,18 @@ export default function AnalyticsPage() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KPICard title="Productivity"     value={formatNumber(productivity?.total)} type="gauge"   color="#f59e0b" delta={3} />
-        <KPICard title="Study Streak"     value={overview?.studyStreak || 0}        valueText="days" type="spark"   color="#818cf8" delta={2} />
-        <KPICard title="Assignment Rate"  value={overview?.assignmentCompletionRate ?? 0}            type="percent" color="#22d3ee" delta={-1} />
-        <KPICard title="Attendance"       value={overview?.attendancePct ?? 0}                     type="percent" color="#34d399" delta={5} />
-      </div>
+      <KPIRow range={range} />
 
       <SectionDivider>Performance</SectionDivider>
       <div className="grid gap-4 md:grid-cols-2">
         <StudyHoursChart range={range} />
-        <AttendanceRadar />
+        <AttendanceRadar range={range} />
       </div>
 
       <SectionDivider>Assignments & Syllabus</SectionDivider>
       <div className="grid gap-4 md:grid-cols-2">
-        <AssignmentCompletion />
-        <SyllabusCompletion />
+        <AssignmentCompletion range={range} />
+        <SyllabusCompletion range={range} />
       </div>
 
       <SectionDivider>Score & Insights</SectionDivider>

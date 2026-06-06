@@ -15,8 +15,11 @@ export function useDashboard() {
 
   return {
     overview: overviewQuery.data,
-    assignments: (assignmentsQuery.data || []).map(mapAssignment),
-    notifications: (notificationsQuery.data || []).map(mapNotification),
+    assignments: (Array.isArray(assignmentsQuery.data)
+      ? assignmentsQuery.data
+      : (assignmentsQuery.data?.data || [])
+    ).map(mapAssignment),
+    notifications: ((notificationsQuery.data?.data) || []).map(mapNotification),
     isLoading: overviewQuery.isLoading || assignmentsQuery.isLoading || notificationsQuery.isLoading,
     error: overviewQuery.error || assignmentsQuery.error || notificationsQuery.error,
     refetch: () => {

@@ -34,8 +34,16 @@ export default function ProfileMenu({ user, onClose }) {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-2xl">
       <div className="flex items-center gap-3 border-b border-border-subtle px-3 py-3">
-        <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-sm font-semibold text-white">
-          {(user?.full_name || user?.name || user?.email || 'U').slice(0, 1).toUpperCase()}
+        <div className="grid h-9 w-9 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-sm font-semibold text-white">
+          {user?.avatar_url ? (
+            <img
+              src={user.avatar_url}
+              alt="Your avatar"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            (user?.full_name || user?.name || user?.email || 'U').slice(0, 1).toUpperCase()
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-foreground">

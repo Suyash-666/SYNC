@@ -4,9 +4,10 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, Chrome, Github, Lock, Mail, User } from 'lucide-react';
-import { authApi } from '../src/api';
-import { setCredentials } from '../src/store/authSlice';
+import { getSupabase } from '../src/lib/supabase';
+import { setSession } from '../src/store/authSlice';
 import { syncSocketAuth } from '../src/lib/socket';
 import { Button, Input } from '../components';
 
@@ -31,6 +32,7 @@ const passwordChecks = [
 export const SignupForm = ({ onSwitch, onNotify }) => {
   const [loading, setLoading] = useState(false);
   const dispatch = useDispatch();
+  const navigate = useNavigate();
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
@@ -47,17 +49,43 @@ export const SignupForm = ({ onSwitch, onNotify }) => {
   const submit = async (values) => {
     setLoading(true);
     try {
-      const data = await authApi.signup({
-        full_name: values.fullName,
+      const supabase = getSupabase();
+      const { data, error } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
-        confirm_password: values.confirmPassword,
+        options: { data: { full_name: values.fullName } },
       });
-      dispatch(setCredentials({ user: data.user, accessToken: data.access || data.accessToken }));
+      if (error) throw error;
+      if (!data?.session) {
+        onNotify(
+          'info',
+          'Account created. Check your email to confirm, then log in.'
+        );
+        onSwitch('login');
+        return;
+      }
+
+      // Create the application "User" row in the same transaction as the
+      // auth.users row, so id alignment holds from day one. The RLS policy
+      // lets the user insert their own row when user_id = auth.uid().
+      const { error: profileErr } = await supabase
+        .from('User')
+        .insert({
+          id: data.user.id,
+          email: values.email,
+          full_name: values.fullName,
+          role: 'STUDENT',
+        });
+      if (profileErr && !String(profileErr.message).toLowerCase().includes('duplicate')) {
+        throw profileErr;
+      }
+
+      dispatch(setSession({ user: data.user, supabaseSession: data.session }));
       syncSocketAuth();
       onNotify('success', 'Account created. You are signed in.');
+      navigate('/onboarding', { replace: true });
     } catch (error) {
-      onNotify('error', error.response?.data?.message || error.message || 'Unable to create account.');
+      onNotify('error', error.message || 'Unable to create account.');
     } finally {
       setLoading(false);
     }

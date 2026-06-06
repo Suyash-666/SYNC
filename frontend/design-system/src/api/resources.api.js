@@ -1,21 +1,27 @@
-import { apiClient } from './client';
-import { unwrap } from './helpers';
+// ============================================================================
+// src/api/resources.api.js
+// Facade: picks the legacy or Supabase-backed implementation based on the
+// 'storage' feature flag. When VITE_USE_SUPABASE is unset / empty / 0 / false,
+// the legacy default below is used and behavior is byte-for-byte identical
+// to before Checkpoint 3.
+//
+// Exports the SAME `resourcesApi` object the rest of the frontend imports,
+// so no caller needs to change.
+// ============================================================================
 
-export const resourcesApi = {
-  getAll: async (params = {}) => unwrap(await apiClient.get('/resources', { params })),
-  upload: async ({ file, title, subject_id }) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (title) formData.append('title', title);
-    if (subject_id) formData.append('subject_id', subject_id);
-    return unwrap(await apiClient.post('/resources/upload', formData));
-  },
-  addLink: async (payload) => unwrap(await apiClient.post('/resources/link', payload)),
-  delete: async (id) => unwrap(await apiClient.delete(`/resources/${id}`)),
-};
+import { isEnabled } from '../lib/featureFlags';
+import legacy from './resources.api.legacy';
+import supabaseImpl from './resources.api.supabase';
 
-// backward-compatibility aliases
-resourcesApi.link = resourcesApi.addLink;
-resourcesApi.remove = resourcesApi.delete;
+const useSupabase = isEnabled('storage');
+
+export const resourcesApi = useSupabase ? supabaseImpl : legacy;
+
+export const getAll = resourcesApi.getAll;
+export const upload = resourcesApi.upload;
+export const addLink = resourcesApi.addLink;
+export const link = resourcesApi.link;
+export const deleteResource = resourcesApi.delete;
+export const remove = resourcesApi.remove;
 
 export default resourcesApi;

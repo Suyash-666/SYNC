@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
   Bell,
@@ -11,9 +12,11 @@ import {
   ListTodo,
   Plus,
   RefreshCcw,
+  Save,
   Sparkles,
   Target,
   TrendingUp,
+  X,
   Zap,
 } from 'lucide-react';
 import {
@@ -23,10 +26,12 @@ import {
   CardEyebrow,
   CardTitle,
   EmptyState,
+  Input,
   Skeleton,
-  SkeletonText,
+  Toast,
 } from '../components';
 import { useDashboard } from '../src/hooks/useDashboard';
+import { useNotes } from '../src/hooks/useNotes';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -114,7 +119,10 @@ function MetricCard({ icon: Icon, label, value, subtitle, accent = 'brand', dela
 
 const DashboardPage = () => {
   const { overview, assignments, notifications, isLoading, error, refetch } = useDashboard();
+  const navigate = useNavigate();
   const [now, setNow] = useState(new Date());
+  const [toast, setToast] = useState({ open: false, variant: 'info', message: '' });
+  const showToast = (variant, message) => setToast({ open: true, variant, message });
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
@@ -169,6 +177,12 @@ const DashboardPage = () => {
 
   return (
     <div className="space-y-8">
+      <Toast
+        open={toast.open}
+        variant={toast.variant}
+        onClose={() => setToast((c) => ({ ...c, open: false }))}
+        message={toast.message}
+      />
       <div className="space-y-8">
         {/* ───────── 1. Welcome hero ───────── */}
         <motion.div
@@ -193,10 +207,19 @@ const DashboardPage = () => {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="secondary" leadingIcon={<RefreshCcw className="h-4 w-4" />} onClick={refetch}>
+            <Button
+              variant="secondary"
+              leadingIcon={<RefreshCcw className="h-4 w-4" />}
+              onClick={() => { refetch(); showToast('success', 'Dashboard refreshed.'); }}
+            >
               Refresh
             </Button>
-            <Button leadingIcon={<Plus className="h-4 w-4" />}>New assignment</Button>
+            <Button
+              leadingIcon={<Plus className="h-4 w-4" />}
+              onClick={() => navigate('/assignments')}
+            >
+              New assignment
+            </Button>
           </div>
         </motion.div>
 
@@ -221,7 +244,12 @@ const DashboardPage = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Badge tone="success" dot>On track</Badge>
-                <Button variant="ghost" size="sm" trailingIcon={<ArrowUpRight className="h-3.5 w-3.5" />}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  trailingIcon={<ArrowUpRight className="h-3.5 w-3.5" />}
+                  onClick={() => navigate('/analytics')}
+                >
                   Details
                 </Button>
               </div>
@@ -267,7 +295,12 @@ const DashboardPage = () => {
                 <CardEyebrow>Don't miss</CardEyebrow>
                 <CardTitle>Upcoming deadlines</CardTitle>
               </div>
-              <Button variant="ghost" size="sm" trailingIcon={<ChevronRight className="h-3.5 w-3.5" />}>
+              <Button
+                variant="ghost"
+                size="sm"
+                trailingIcon={<ChevronRight className="h-3.5 w-3.5" />}
+                onClick={() => navigate('/assignments')}
+              >
                 View all
               </Button>
             </div>
@@ -314,7 +347,7 @@ const DashboardPage = () => {
         <div className="grid gap-6 lg:grid-cols-3">
           <AttendanceWidget />
           <StreakWidget streak={streak} />
-          <NotesWidget notes={overview?.recentNotes || []} />
+          <NotesWidget onToast={showToast} />
         </div>
 
         {/* ───────── 5. Assignments + Notifications ───────── */}
@@ -327,7 +360,13 @@ const DashboardPage = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Badge>{assignments.length} active</Badge>
-                <Button variant="secondary" size="sm">Open board</Button>
+                <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate('/assignments')}
+              >
+                Open board
+              </Button>
               </div>
             </div>
             {assignments.length === 0 ? (
@@ -336,7 +375,7 @@ const DashboardPage = () => {
                 title="No assignments yet"
                 description="Create your first assignment to start tracking."
                 actionLabel="New assignment"
-                onAction={() => {}}
+                onAction={() => navigate('/assignments')}
               />
             ) : (
               <ul className="divide-y divide-border-subtle">
@@ -434,10 +473,17 @@ const DashboardPage = () => {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="secondary" leadingIcon={<TrendingUp className="h-4 w-4" />}>
+              <Button
+                variant="secondary"
+                leadingIcon={<TrendingUp className="h-4 w-4" />}
+                onClick={() => navigate('/ai')}
+              >
                 Plan my week
               </Button>
-              <Button leadingIcon={<GraduationCap className="h-4 w-4" />}>
+              <Button
+                leadingIcon={<GraduationCap className="h-4 w-4" />}
+                onClick={() => navigate('/ai')}
+              >
                 Open AI assistant
               </Button>
             </div>
@@ -570,7 +616,50 @@ function StreakWidget({ streak }) {
   );
 }
 
-function NotesWidget({ notes }) {
+function NotesWidget({ onToast }) {
+  // Use the same hook the Notes page uses. We fetch just the first page
+  // (the default limit=20) — the widget only shows 4 rows so we don't
+  // need pagination here.
+  const { notes, isLoading, createNote } = useNotes();
+  const navigate = useNavigate();
+  const [composing, setComposing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftContent, setDraftContent] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const openCompose = () => {
+    setDraftTitle('');
+    setDraftContent('');
+    setComposing(true);
+  };
+  const cancelCompose = () => {
+    if (saving) return;
+    setComposing(false);
+    setDraftTitle('');
+    setDraftContent('');
+  };
+
+  const handleSave = async (e) => {
+    e?.preventDefault?.();
+    const title = draftTitle.trim() || 'Untitled';
+    const content = draftContent.trim();
+    if (!content) return;
+    setSaving(true);
+    try {
+      await createNote({ title, content });
+      onToast?.('success', 'Note saved.');
+      setComposing(false);
+      setDraftTitle('');
+      setDraftContent('');
+    } catch (err) {
+      onToast?.('error', err?.message || 'Failed to save note.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const recent = (notes || []).slice(0, 4);
+
   return (
     <Card padding="md" className="h-full">
       <div className="mb-4 flex items-center justify-between">
@@ -578,26 +667,110 @@ function NotesWidget({ notes }) {
           <CardEyebrow>Capture</CardEyebrow>
           <CardTitle>Quick notes</CardTitle>
         </div>
-        <Button size="sm" leadingIcon={<Plus className="h-3.5 w-3.5" />}>New note</Button>
+        {composing ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            leadingIcon={<X className="h-3.5 w-3.5" />}
+            onClick={cancelCompose}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            leadingIcon={<Plus className="h-3.5 w-3.5" />}
+            onClick={openCompose}
+          >
+            New note
+          </Button>
+        )}
       </div>
-      {notes.length === 0 ? (
+
+      {composing ? (
+        <form onSubmit={handleSave} className="space-y-2">
+          <Input
+            value={draftTitle}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            placeholder="Title (optional)"
+            maxLength={120}
+            autoFocus
+          />
+          <textarea
+            value={draftContent}
+            onChange={(e) => setDraftContent(e.target.value)}
+            placeholder="What's on your mind?"
+            rows={4}
+            className="w-full resize-y rounded-md border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-foreground-subtle transition-all duration-150 focus:border-foreground/50 focus:outline-none focus:ring-2 focus:ring-foreground/10"
+          />
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={cancelCompose}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              leadingIcon={<Save className="h-3.5 w-3.5" />}
+              isLoading={saving}
+              disabled={!draftContent.trim()}
+            >
+              Save
+            </Button>
+          </div>
+        </form>
+      ) : isLoading ? (
+        <div className="space-y-2">
+          <Skeleton variant="block" className="h-14" />
+          <Skeleton variant="block" className="h-14" />
+          <Skeleton variant="block" className="h-14" />
+        </div>
+      ) : recent.length === 0 ? (
         <EmptyState
           icon={<BookOpen className="h-6 w-6" />}
           title="No notes yet"
           description="Capture a thought before it's gone."
           actionLabel="New note"
+          onAction={openCompose}
         />
       ) : (
         <ul className="space-y-2">
-          {notes.slice(0, 4).map((n, i) => (
-            <li
-              key={i}
-              className="rounded-xl border border-border-subtle bg-background-subtle/40 p-3 transition-colors hover:border-border"
-            >
-              <div className="line-clamp-1 text-sm font-semibold text-foreground">{n.title || 'Untitled'}</div>
-              <div className="mt-0.5 line-clamp-2 text-xs text-foreground-muted">{n.preview || n.content}</div>
+          {recent.map((n) => (
+            <li key={n.id}>
+              <button
+                type="button"
+                onClick={() => navigate('/notes')}
+                className="block w-full rounded-xl border border-border-subtle bg-background-subtle/40 p-3 text-left transition-colors hover:border-border hover:bg-background-subtle/70"
+              >
+                <div className="line-clamp-1 text-sm font-semibold text-foreground">
+                  {n.title || 'Untitled'}
+                </div>
+                <div className="mt-0.5 line-clamp-2 text-xs text-foreground-muted">
+                  {n.content || 'No content'}
+                </div>
+                <div className="mt-1 text-2xs uppercase tracking-[0.12em] text-foreground-subtle">
+                  {n.updatedAt ? new Date(n.updatedAt).toLocaleDateString() : ''}
+                </div>
+              </button>
             </li>
           ))}
+          {notes.length > 4 ? (
+            <li>
+              <button
+                type="button"
+                onClick={() => navigate('/notes')}
+                className="block w-full rounded-xl border border-dashed border-border-subtle px-3 py-2 text-center text-xs text-foreground-muted transition-colors hover:border-foreground/30 hover:text-foreground"
+              >
+                + {notes.length - 4} more — open Notes
+              </button>
+            </li>
+          ) : null}
         </ul>
       )}
     </Card>

@@ -1,3 +1,5 @@
+// @deprecated since Checkpoint 5b — frontend uses supabase.from('Note')
+// directly. Kept alive for the legacy HTTP routes until Checkpoint 8 deletion.
 const ApiResponse = require('../utils/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const NotesService = require('../services/notes.service');

@@ -1,58 +1,81 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronUp, ChevronDown, Check, Sparkles, Calendar, BookOpen, AlertTriangle, Clock, ArrowRight } from 'lucide-react';
+import { ChevronUp, ChevronDown, Calendar, Clock, Loader2, AlertCircle } from 'lucide-react';
+import { assignmentsApi } from '../src/api/assignments.api';
 
 /**
- * StudyPlannerPanel — right-side study planner card on the AI Assistant page.
+ * StudyPlannerPanel — right-side panel on the AI Assistant page.
+ *
+ * Shows the user's real upcoming assignment deadlines, pulled from the
+ * assignments API. Falls back to a friendly empty state when the user
+ * has no open work.
  */
-const BLOCKS = [
-  { id: 'b1', time: '9:00 – 10:00',  subject: 'DSA',  topic: 'Revision', tone: 'brand'   },
-  { id: 'b2', time: '11:00 – 12:00', subject: 'OS',   topic: 'Notes',    tone: 'warning' },
-  { id: 'b3', time: '14:00 – 15:00', subject: 'DBMS', topic: 'Queries',  tone: 'success' },
-];
-
-const DEADLINES = [
-  { label: 'Project proposal', due: '3 days',    tone: 'warning' },
-  { label: 'DBMS quiz',        due: 'tomorrow',  tone: 'danger'  },
-  { label: 'DSA assignment',   due: '5 days',    tone: 'success' },
-];
-
-const RESOURCES = [
-  { label: 'Algorithms Cheat Sheet', icon: '⚡' },
-  { label: 'OS Notes PDF',           icon: '💻' },
-  { label: 'DBMS Query Guide',       icon: '🗄️' },
-];
-
-const TONE_DOT = {
-  brand:   'bg-brand-500',
-  warning: 'bg-warning',
-  success: 'bg-success',
-  danger:  'bg-danger',
-};
 
 const TONE_PILL = {
-  danger:  'bg-danger-soft border-danger/30',
-  warning: 'bg-warning-soft border-warning/30',
-  success: 'bg-success-soft border-success/30',
+  danger:  'bg-danger-soft border-danger/30 text-danger',
+  warning: 'bg-warning-soft border-warning/30 text-foreground',
+  success: 'bg-success-soft border-success/30 text-foreground',
+  brand:   'bg-brand-50 border-brand/30 text-brand-700',
 };
+
+function daysUntil(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const ms = d.getTime() - Date.now();
+  const days = Math.ceil(ms / 86400000);
+  if (days < 0) return { label: 'Overdue', tone: 'danger' };
+  if (days === 0) return { label: 'Due today', tone: 'danger' };
+  if (days === 1) return { label: 'Tomorrow', tone: 'warning' };
+  if (days <= 3) return { label: `${days} days`, tone: 'warning' };
+  if (days <= 7) return { label: `${days} days`, tone: 'brand' };
+  return { label: `${days} days`, tone: 'success' };
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 export default function StudyPlannerPanel() {
   const [open, setOpen] = useState(true);
-  const [blocks, setBlocks] = useState(BLOCKS);
+  const [assignments, setAssignments] = useState(null); // null = loading
+  const [error, setError] = useState(null);
 
-  const toggleDone = (id) =>
-    setBlocks((bs) => bs.map((b) => (b.id === id ? { ...b, done: !b.done } : b)));
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await assignmentsApi.getAll();
+        if (cancelled) return;
+        const rows = Array.isArray(res) ? res : (res?.data || []);
+        setAssignments(rows);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err?.response?.data?.message || err?.message || 'Failed to load');
+        setAssignments([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  const doneCount = blocks.filter((b) => b.done).length;
-  const pct = Math.round((doneCount / blocks.length) * 100);
-  const C = 2 * Math.PI * 20;
+  const upcoming = useMemo(() => {
+    if (!Array.isArray(assignments)) return [];
+    return assignments
+      .filter((a) => a?.status !== 'DONE' && a?.status !== 'COMPLETED')
+      .filter((a) => a?.due_date)
+      .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))
+      .slice(0, 6);
+  }, [assignments]);
 
   return (
     <div className="h-full">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="text-2xs font-semibold uppercase tracking-[0.14em] text-foreground-subtle">Daily</div>
-          <div className="mt-0.5 text-sm font-semibold text-foreground">Study Planner</div>
+          <div className="text-2xs font-semibold uppercase tracking-[0.14em] text-foreground-subtle">Upcoming</div>
+          <div className="mt-0.5 text-sm font-semibold text-foreground">Deadlines</div>
         </div>
         <button
           type="button"
@@ -70,113 +93,47 @@ export default function StudyPlannerPanel() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-4"
+            className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4"
           >
-            {/* Progress ring */}
-            <div className="flex items-center gap-3">
-              <div className="relative h-12 w-12">
-                <svg viewBox="0 0 48 48" className="h-full w-full -rotate-90">
-                  <circle cx="24" cy="24" r="20" fill="none" className="stroke-border" strokeWidth="5" />
-                  <circle
-                    cx="24" cy="24" r="20" fill="none" className="stroke-brand-500"
-                    strokeWidth="5"
-                    strokeDasharray={`${(pct / 100) * C} ${C}`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="absolute inset-0 grid place-items-center text-2xs font-bold text-foreground">
-                  {pct}%
-                </div>
+            {assignments === null ? (
+              <div className="flex items-center gap-2 text-2xs text-foreground-muted">
+                <Loader2 className="h-3 w-3 animate-spin" /> Loading assignments…
               </div>
-              <div>
-                <div className="text-sm font-semibold text-foreground">Today's progress</div>
-                <div className="text-2xs text-foreground-muted">
-                  {doneCount} of {blocks.length} sessions complete
-                </div>
+            ) : error ? (
+              <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-2xs text-foreground">
+                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-danger" />
+                <span>Couldn't load deadlines — {error}</span>
               </div>
-            </div>
-
-            {/* Sessions */}
-            <div>
-              <div className="mb-2 text-2xs font-semibold uppercase tracking-[0.14em] text-foreground-subtle">Today's sessions</div>
+            ) : upcoming.length === 0 ? (
+              <div className="flex flex-col items-center gap-1.5 py-6 text-center">
+                <div className="text-2xl">🎉</div>
+                <div className="text-xs font-semibold text-foreground">No upcoming deadlines</div>
+                <div className="text-2xs text-foreground-muted">You're all caught up.</div>
+              </div>
+            ) : (
               <ul className="flex flex-col gap-1.5">
-                {blocks.map((b) => (
-                  <li
-                    key={b.id}
-                    className={[
-                      'flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all',
-                      b.done ? 'border-border-subtle bg-background-subtle/40 opacity-60' : 'border-border bg-surface',
-                    ].join(' ')}
-                  >
-                    <span className={['h-2 w-2 shrink-0 rounded-full', b.done ? 'bg-foreground-subtle' : TONE_DOT[b.tone]].join(' ')} />
-                    <div className="min-w-0 flex-1">
-                      <div className={['text-xs font-semibold', b.done ? 'text-foreground-subtle line-through' : 'text-foreground'].join(' ')}>
-                        {b.subject} <span className="text-foreground-subtle">·</span> {b.topic}
+                {upcoming.map((a) => {
+                  const due = daysUntil(a.due_date);
+                  return (
+                    <li
+                      key={a.id || a._id}
+                      className={['flex items-center justify-between rounded-lg border px-3 py-2', TONE_PILL[due?.tone || 'brand']].join(' ')}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-semibold">{a.title || a.name || 'Untitled assignment'}</div>
+                        <div className="mt-0.5 flex items-center gap-1.5 font-mono text-2xs text-foreground-muted">
+                          <Calendar className="h-3 w-3" /> {formatDate(a.due_date)}
+                          {a.subject?.name ? <span>· {a.subject.name}</span> : null}
+                        </div>
                       </div>
-                      <div className="font-mono text-2xs text-foreground-muted">{b.time}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleDone(b.id)}
-                      className={[
-                        'inline-flex items-center gap-1 rounded-md px-2 py-1 text-2xs font-semibold transition-colors',
-                        b.done
-                          ? 'border border-success/30 bg-success-soft text-success-fg'
-                          : 'border border-border bg-surface text-foreground-muted hover:bg-background-muted',
-                      ].join(' ')}
-                    >
-                      {b.done ? <Check className="h-3 w-3" /> : null}
-                      {b.done ? 'Done' : 'Mark'}
-                    </button>
-                  </li>
-                ))}
+                      <span className="ml-3 inline-flex items-center gap-1 font-mono text-2xs font-bold">
+                        <Clock className="h-3 w-3" /> {due?.label}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
-            </div>
-
-            {/* Deadlines */}
-            <div>
-              <div className="mb-2 text-2xs font-semibold uppercase tracking-[0.14em] text-foreground-subtle">Upcoming deadlines</div>
-              <ul className="flex flex-col gap-1.5">
-                {DEADLINES.map((d) => (
-                  <li
-                    key={d.label}
-                    className={[
-                      'flex items-center justify-between rounded-lg border px-3 py-2',
-                      TONE_PILL[d.tone],
-                    ].join(' ')}
-                  >
-                    <span className="text-xs font-semibold text-foreground">{d.label}</span>
-                    <span className="font-mono text-2xs font-bold text-foreground-muted">{d.due}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Resources */}
-            <div>
-              <div className="mb-2 text-2xs font-semibold uppercase tracking-[0.14em] text-foreground-subtle">Resources</div>
-              <ul className="flex flex-col gap-1.5">
-                {RESOURCES.map((r) => (
-                  <li key={r.label}>
-                    <a
-                      href="#"
-                      className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground-muted transition-colors hover:border-border-strong hover:bg-background-muted hover:text-foreground"
-                    >
-                      <span className="text-base">{r.icon}</span>
-                      {r.label}
-                      <ArrowRight className="ml-auto h-3 w-3 text-foreground-subtle" />
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <button
-              type="button"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow"
-            >
-              <Sparkles className="h-4 w-4" /> Generate new plan
-            </button>
+            )}
           </motion.div>
         ) : null}
       </AnimatePresence>

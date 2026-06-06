@@ -44,7 +44,10 @@ export function useAssignments(filters = {}) {
   });
 
   return {
-    assignments: (assignmentsQuery.data || []).map(mapAssignment),
+    assignments: (Array.isArray(assignmentsQuery.data)
+      ? assignmentsQuery.data
+      : (assignmentsQuery.data?.data || [])
+    ).map(mapAssignment),
     pagination: assignmentsQuery.data?.pagination || null,
     isLoading: assignmentsQuery.isLoading,
     error: assignmentsQuery.error,

@@ -20,3 +20,28 @@
 Optional:
 - Configure Redis cloud provider and update `REDIS_URL` for production brute-force counters and session storage.
 - Configure Sentry or similar for runtime error tracking.
+
+## Storage CORS configuration (Checkpoint 3+)
+
+When `VITE_USE_SUPABASE=storage` is enabled, the browser uploads files
+directly to Supabase Storage. The `resources` and `avatars` buckets must
+allow the frontend's origin.
+
+In the **Supabase Dashboard → Storage → [bucket] → Configuration → CORS**,
+add:
+
+```
+Allowed origins:
+- http://localhost:5173
+- https://<your-vercel-domain>.vercel.app
+- (your custom domain, if any)
+
+Allowed methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Allowed headers: Authorization, Content-Type, x-client-info, apikey
+Expose headers: Content-Range, Content-Length, ETag
+Max age: 3600
+```
+
+If a new origin is added later (custom domain, staging URL, etc.), update
+both buckets' CORS lists in the Supabase Dashboard.
+

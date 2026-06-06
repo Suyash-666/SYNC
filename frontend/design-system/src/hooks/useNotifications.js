@@ -1,72 +1,19 @@
-import { useEffect } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useDispatch, useSelector } from 'react-redux';
-import { notificationsApi } from '../api';
-import { getNotificationsSocket, connectSockets } from '../lib/socket';
-import { mapNotification } from '../lib/mappers';
-import { markAllNotificationsRead, markNotificationRead, prependNotification, setNotifications } from '../store/notificationsSlice';
+// ============================================================================
+// src/hooks/useNotifications.js
+// Facade: picks the legacy or Supabase-Realtime-backed implementation
+// based on the 'notifications' feature flag. When VITE_USE_SUPABASE is
+// unset / empty / 0 / false, the legacy default is used and behavior
+// is byte-for-byte identical to before Checkpoint 4.
+//
+// Exports the SAME `useNotifications` hook the rest of the frontend
+// imports, so no caller needs to change.
+// ============================================================================
 
-export function useNotifications(params = { page: 1, limit: 20 }) {
-  const dispatch = useDispatch();
-  const queryClient = useQueryClient();
-  const notificationsState = useSelector((state) => state.notifications);
+import { isEnabled } from '../lib/featureFlags';
+import { useNotifications as legacyHook } from './useNotifications.legacy';
+import { useNotifications as supabaseHook } from './useNotifications.supabase';
 
-  const notificationsQuery = useQuery({
-    queryKey: ['notifications', params],
-    queryFn: () => notificationsApi.getAll(params),
-  });
+const useSupabase = isEnabled('notifications');
 
-  useEffect(() => {
-    if (notificationsQuery.data) {
-      dispatch(setNotifications(notificationsQuery.data));
-    }
-  }, [dispatch, notificationsQuery.data]);
-
-  useEffect(() => {
-    connectSockets();
-    const socket = getNotificationsSocket();
-
-    const onNewNotification = (payload) => {
-      if (!payload) return;
-      dispatch(prependNotification(payload));
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    };
-
-    const onRead = (payload) => {
-      if (payload?.notification_id) dispatch(markNotificationRead(payload.notification_id));
-    };
-
-    socket.on('new_notification', onNewNotification);
-    socket.on('notification_read', onRead);
-
-    return () => {
-      socket.off('new_notification', onNewNotification);
-      socket.off('notification_read', onRead);
-    };
-  }, [dispatch, queryClient]);
-
-  const markReadMutation = useMutation({
-    mutationFn: (id) => notificationsApi.markRead(id),
-    onSuccess: (_data, id) => dispatch(markNotificationRead(id)),
-  });
-
-  const markAllMutation = useMutation({
-    mutationFn: notificationsApi.markAllRead,
-    onSuccess: () => dispatch(markAllNotificationsRead()),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id) => notificationsApi.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
-  });
-
-  return {
-    notifications: (notificationsQuery.data || []).map(mapNotification),
-    unreadCount: notificationsState.unreadCount,
-    isLoading: notificationsQuery.isLoading,
-    error: notificationsQuery.error,
-    markRead: markReadMutation.mutateAsync,
-    markAllRead: markAllMutation.mutateAsync,
-    removeNotification: deleteMutation.mutateAsync,
-  };
-}
+export const useNotifications = useSupabase ? supabaseHook : legacyHook;
+export default useNotifications;

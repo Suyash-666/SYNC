@@ -1,3 +1,5 @@
+// @deprecated since Checkpoint 4 — frontend uses Supabase Realtime + direct
+// table updates. Kept alive for the legacy HTTP routes until Checkpoint 8 deletion.
 const ApiResponse = require('../utils/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const NotificationService = require('../services/notification.service');

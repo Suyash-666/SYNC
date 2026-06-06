@@ -1,18 +1,26 @@
-import { apiClient } from './client';
-import { unwrap } from './helpers';
+// ============================================================================
+// src/api/notifications.api.js
+// Facade: picks the legacy or Supabase-backed implementation based on the
+// 'notifications' feature flag. When VITE_USE_SUPABASE is unset / empty /
+// 0 / false, the legacy default is used and behavior is byte-for-byte
+// identical to before Checkpoint 4.
+//
+// Exports the SAME `notificationsApi` object the rest of the frontend
+// imports, so no caller needs to change.
+// ============================================================================
 
-export const notificationsApi = {
-  getAll: async (params = {}) =>
-    unwrap(await apiClient.get('/notifications', { params })),
+import { isEnabled } from '../lib/featureFlags';
+import legacy from './notifications.api.legacy';
+import supabaseImpl from './notifications.api.supabase';
 
-  markRead: async (id) =>
-    unwrap(await apiClient.patch(`/notifications/${id}/read`)),
+const useSupabase = isEnabled('notifications');
 
-  markAllRead: async () =>
-    unwrap(await apiClient.patch('/notifications/read-all')),
+export const notificationsApi = useSupabase ? supabaseImpl : legacy;
 
-  delete: async (id) =>
-    unwrap(await apiClient.delete(`/notifications/${id}`)),
-};
+export const getAll = notificationsApi.getAll;
+export const markRead = notificationsApi.markRead;
+export const markAllRead = notificationsApi.markAllRead;
+export const deleteNotification = notificationsApi.delete;
+export const remove = notificationsApi.remove;
 
 export default notificationsApi;

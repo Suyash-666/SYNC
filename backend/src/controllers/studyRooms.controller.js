@@ -1,9 +1,12 @@
+// @deprecated since Checkpoint 6 — frontend uses supabase.from('StudyRoom')
+// directly. Socket.IO study-room handler is unchanged. Kept alive for the
+// legacy HTTP routes until Checkpoint 8 deletion.
 const ApiResponse = require('../utils/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const StudyService = require('../services/studyRooms.service');
 
 async function list(req, res){
-  const data = await StudyService.listRooms();
+  const data = await StudyService.listRooms(req.user.id);
   return res.json(ApiResponse.success(data, 'Study rooms'));
 }
 

@@ -99,6 +99,7 @@ model User {
 resources                Resource[]
 created_study_rooms      StudyRoom[]
 study_room_messages      StudyRoomMessage[]
+created_room_invites     StudyRoomInvite[]
 password_resets          PasswordReset[]
 }
 
@@ -234,6 +235,7 @@ model StudyRoom {
 
   memberships StudyRoomMembership[]
   messages    StudyRoomMessage[]
+  invites     StudyRoomInvite[]
 }
 
 model StudyRoomMembership {
@@ -257,6 +259,24 @@ model StudyRoomMessage {
   created_at DateTime @default(now())
 
   @@index([room_id, created_at])
+}
+
+model StudyRoomInvite {
+  id           String    @id @default(uuid()) @db.Uuid
+  room         StudyRoom @relation(fields: [room_id], references: [id], onDelete: Cascade)
+  room_id      String    @db.Uuid
+  // Short, URL-safe token embedded in invite links (e.g. /join/ABC123).
+  // 12 chars of base32 ⇒ ~60 bits of entropy — enough for our use case.
+  code         String    @unique
+  created_by   User      @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
+  created_by_id String   @db.Uuid
+  expires_at   DateTime?
+  max_uses     Int?
+  use_count    Int       @default(0)
+  revoked_at   DateTime?
+  created_at   DateTime  @default(now())
+
+  @@index([room_id])
 }
 
 model Notification {

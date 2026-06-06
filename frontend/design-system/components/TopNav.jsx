@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { Bell, Menu, Search, X } from 'lucide-react';
 import ProfileMenu from './ProfileMenu';
 
@@ -12,6 +13,20 @@ export const TopNav = React.forwardRef(function TopNav(
   const [searchValue, setSearchValue] = useState('');
   const profileRef = useRef(null);
   const user = useSelector((s) => s.auth.user);
+  // Live unread count from the notifications slice — same source the
+  // Notifications page reads from. The slice updates on realtime
+  // inserts and on mark-read actions, so this dot stays in sync.
+  const unreadCount = useSelector((s) => s.notifications?.unreadCount || 0);
+  const navigate = useNavigate();
+  const hasUnread = unreadCount > 0;
+
+  const handleNotificationsClick = () => {
+    if (onNotificationsClick) {
+      onNotificationsClick();
+      return;
+    }
+    navigate('/notifications');
+  };
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -76,12 +91,17 @@ export const TopNav = React.forwardRef(function TopNav(
       <div className="ml-auto flex items-center gap-1.5">
         <button
           type="button"
-          onClick={onNotificationsClick}
-          aria-label="Notifications"
+          onClick={handleNotificationsClick}
+          aria-label={hasUnread ? `Notifications (${unreadCount} unread)` : 'Notifications'}
           className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-muted hover:text-foreground"
         >
           <Bell className="h-5 w-5" />
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger ring-2 ring-surface" />
+          {hasUnread ? (
+            <span
+              aria-hidden
+              className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger ring-2 ring-surface"
+            />
+          ) : null}
         </button>
 
         <div ref={profileRef} className="relative">
@@ -89,9 +109,17 @@ export const TopNav = React.forwardRef(function TopNav(
             type="button"
             onClick={() => setProfileOpen((v) => !v)}
             aria-label="Open profile menu"
-            className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-background transition-colors hover:bg-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20"
+            className="ml-1 inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-foreground text-sm font-semibold text-background transition-colors hover:bg-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20"
           >
-            {(user?.full_name || user?.name || user?.email || 'U').slice(0, 1).toUpperCase()}
+            {user?.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt="Your avatar"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              (user?.full_name || user?.name || user?.email || 'U').slice(0, 1).toUpperCase()
+            )}
           </button>
           {profileOpen ? (
             <div className="absolute right-0 top-11 z-50 w-60 origin-top-right animate-fade-up">

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Plus, Search, Trash2 } from 'lucide-react';
 
 function timeAgo(ts) {
+  if (!ts) return '';
   const diff = Date.now() - ts;
   const m = Math.floor(diff / 60000);
   if (m < 1) return 'just now';
@@ -25,7 +26,7 @@ function ConvItem({ c, active, onClick, onDelete }) {
         ].join(' ')}
       >
         {active ? <span className="absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-brand-500" /> : null}
-        <div className="truncate pl-1 text-xs font-semibold">{c.title}</div>
+        <div className="truncate pl-1 text-xs font-semibold">{c.title || 'New chat'}</div>
         <div className="mt-0.5 flex items-center justify-between pl-1">
           <span className="font-mono text-2xs text-foreground-subtle">{timeAgo(c.updatedAt)}</span>
         </div>
@@ -56,18 +57,20 @@ function Section({ label, items, activeId, onSelect, onDelete }) {
   );
 }
 
-export default function ConversationHistory({ conversations, setConversations, activeId, setActiveId, onNew }) {
-  function remove(id) {
-    if (!window.confirm('Delete this conversation?')) return;
-    setConversations((arr) => arr.filter((x) => x.id !== id));
-    if (activeId === id) setActiveId(conversations.find((x) => x.id !== id)?.id || null);
-  }
+export default function ConversationHistory({ conversations, activeId, onSelect, onNew, onDelete }) {
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return conversations;
+    const q = query.toLowerCase();
+    return conversations.filter((c) => (c.title || '').toLowerCase().includes(q));
+  }, [conversations, query]);
 
   const DAY = 86400000;
   const now = Date.now();
-  const today = conversations.filter((c) => now - c.updatedAt < DAY);
-  const week  = conversations.filter((c) => now - c.updatedAt >= DAY && now - c.updatedAt < 7 * DAY);
-  const older = conversations.filter((c) => now - c.updatedAt >= 7 * DAY);
+  const today = filtered.filter((c) => now - (c.updatedAt || 0) < DAY);
+  const week  = filtered.filter((c) => now - (c.updatedAt || 0) >= DAY && now - (c.updatedAt || 0) < 7 * DAY);
+  const older = filtered.filter((c) => now - (c.updatedAt || 0) >= 7 * DAY);
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface">
@@ -90,6 +93,8 @@ export default function ConversationHistory({ conversations, setConversations, a
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-subtle" />
           <input
             type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="Search conversations…"
             className="h-8 w-full rounded-lg border border-border bg-background-subtle pl-8 pr-3 text-xs text-foreground placeholder:text-foreground-subtle focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
           />
@@ -97,13 +102,17 @@ export default function ConversationHistory({ conversations, setConversations, a
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-subtle p-3">
-        <Section label="Today"     items={today} activeId={activeId} onSelect={setActiveId} onDelete={remove} />
-        <Section label="This Week" items={week}  activeId={activeId} onSelect={setActiveId} onDelete={remove} />
-        <Section label="Older"     items={older} activeId={activeId} onSelect={setActiveId} onDelete={remove} />
+        <Section label="Today"     items={today} activeId={activeId} onSelect={onSelect} onDelete={onDelete} />
+        <Section label="This Week" items={week}  activeId={activeId} onSelect={onSelect} onDelete={onDelete} />
+        <Section label="Older"     items={older} activeId={activeId} onSelect={onSelect} onDelete={onDelete} />
         {conversations.length === 0 ? (
           <div className="mt-10 text-center text-2xs text-foreground-subtle">
             <div className="mb-2 text-2xl">💬</div>
             No conversations yet
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="mt-10 text-center text-2xs text-foreground-subtle">
+            No chats match "{query}"
           </div>
         ) : null}
       </div>
